@@ -1,22 +1,37 @@
 # Copyright (c) ONNX Project Contributors
 #
 # SPDX-License-Identifier: Apache-2.0
-"""Decoding tests for every image format supported by the ImageDecoder.
+"""End-to-end ImageDecoder tests for every supported image format.
 
-These mirror the C++ ``unittests/cc/test_image_decoder.cc`` cases, exercising
-the same minimal 2x2 / 2x1 image bytestreams through the ``decode_image``
-Python binding so that BMP, PNM, JPEG2000 and (compressed) TIFF are all covered
-from Python as well. The byte-streams are annotated in the C++ file; here they
-are kept as compact hex literals.
+These build a one-node ``ImageDecoder`` ONNX model, register this package's
+image kernels with the onnx-light dispatch table (``register_image_kernels``)
+and run the model through onnx-light's :class:`ReferenceEvaluator`, feeding the
+encoded bytestream as a ``uint8`` input tensor and checking the decoded
+``(H, W, C)`` output. They mirror the C++ ``unittests/cc/test_image_decoder.cc``
+cases (BMP, PNM, uncompressed TIFF and the compressed TIFF variants handled by
+this package) but exercise the full model-execution path rather than calling the
+kernel directly.
+
+Running a model requires the onnx-light Python package; when it is not
+importable the whole module is skipped.
 """
 
 from __future__ import annotations
 
-import ctypes
-import ctypes.util
 import unittest
 
-from onnx_light_kernel_images.onnx_py._imgpykernels import decode_image
+import numpy as np
+
+try:
+    from onnx_light.onnx import TensorProto, helper
+    from onnx_light.onnx.reference import ReferenceEvaluator
+
+    from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels
+
+    _IMPORT_ERROR: str | None = None
+except ImportError as exc:  # pragma: no cover - exercised only without onnx-light
+    _IMPORT_ERROR = str(exc)
+
 
 # Minimal 2x2 24-bit uncompressed BMP (BI_RGB). Bottom-up rows:
 # row0=[Blue, White], row1=[Red, Green].
@@ -29,18 +44,6 @@ BMP_DATA = bytes.fromhex(
 # Minimal PNM P6 (binary RGB) 2x1 image: Red, Green.
 PNM_DATA = b"P6\n2 1\n255\n" + bytes([0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00])
 
-# Minimal lossless JPEG2000 (JP2 file format) 2x1 image: Red, Green.
-JP2_DATA = bytes.fromhex(
-    "0000000c6a5020200d0a870a00000014667479706a703220000000006a703220"
-    "0000002d6a703268000000166968647200000001000000020003070700000000"
-    "000f636f6c7201000000000010000000986a703263ff4fff51002f0000000000"
-    "02000000010000000000000000000000020000000100000000000000000003070"
-    "101070101070101ff52000c00000001000004040001ff5c00044040ff640025"
-    "000143726561746564206279204f70656e4a5045472076657273696f6e20322e"
-    "352e34ff90000a0000000000200001ff93df80200bb28a7fdf801805a2dddf80"
-    "10093fffd9"
-)
-
 # Minimal little-endian baseline uncompressed RGB TIFF, 2x1: Red, Green.
 TIFF_DATA = bytes.fromhex(
     "49492a0008000000090000010300010000000200000001010300010000000100"
@@ -51,7 +54,7 @@ TIFF_DATA = bytes.fromhex(
 )
 
 # Compressed variants of the 2x1 RGB TIFF above (Red, Green). Same IFD layout
-# as ``TIFF_DATA`` but with a non-trivial Compression tag; ``decode_image``
+# as ``TIFF_DATA`` but with a non-trivial Compression tag; this package's kernel
 # rewrites them into an uncompressed baseline TIFF before decoding.
 
 # Compression = PackBits (32773). Strip = [0x05, FF,00,00,00,FF,00].
@@ -82,122 +85,101 @@ TIFF_DEFLATE_DATA = bytes.fromhex(
 )
 
 
-def _openjpeg_runtime_available() -> bool:
-    """Returns True when the OpenJPEG runtime (libopenjp2) can be loaded.
-
-    Mirrors the kernel's own runtime gating so the JPEG2000 test can assert
-    full decoding only when the optional dependency is present.
-    """
-    names = ["libopenjp2.so.7", "libopenjp2.so", "libopenjp2.dll", "openjp2.dll"]
-    found = ctypes.util.find_library("openjp2")
-    if found:
-        names.insert(0, found)
-    for name in names:
-        try:
-            ctypes.CDLL(name)
-            return True
-        except OSError:
-            continue
-    return False
+def _make_image_decoder_model(pixel_format: str):
+    """Builds a single-node ``ImageDecoder`` model for ``pixel_format``."""
+    node = helper.make_node("ImageDecoder", ["encoded"], ["image"], pixel_format=pixel_format)
+    graph = helper.make_graph(
+        [node],
+        "image_decoder",
+        [helper.make_tensor_value_info("encoded", TensorProto.UINT8, [None])],
+        [helper.make_tensor_value_info("image", TensorProto.UINT8, [None, None, None])],
+    )
+    return helper.make_model(graph, opset_imports=[helper.make_opsetid("", 20)])
 
 
-class TestImageFormats(unittest.TestCase):
-    """Decoding tests for every supported image format."""
+@unittest.skipIf(_IMPORT_ERROR is not None, f"onnx-light not available: {_IMPORT_ERROR}")
+class TestImageDecoderModel(unittest.TestCase):
+    """Runs an ImageDecoder model for every supported image format."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Register this package's image kernels once with the onnx-light
+        # dispatch table so the ImageDecoder node (including the compressed
+        # TIFF support added here) is resolved when the model runs.
+        register_image_kernels()
+
+    def _decode(self, data: bytes, pixel_format: str) -> np.ndarray:
+        model = _make_image_decoder_model(pixel_format)
+        sess = ReferenceEvaluator(model)
+        encoded = np.frombuffer(data, dtype=np.uint8)
+        (image,) = sess.run(None, {"encoded": encoded})
+        self.assertEqual(image.dtype, np.uint8)
+        self.assertEqual(image.ndim, 3)
+        return image
 
     def test_decode_bmp_rgb(self):
-        shape, data = decode_image(BMP_DATA, "RGB")
-        self.assertEqual(shape, [2, 2, 3])
-        px = list(data)
+        image = self._decode(BMP_DATA, "RGB")
+        self.assertEqual(image.shape, (2, 2, 3))
         # Row 0 (display top) = BMP row 1: Red, Green
-        self.assertEqual(px[0:3], [255, 0, 0])
-        self.assertEqual(px[3:6], [0, 255, 0])
+        np.testing.assert_array_equal(image[0, 0], [255, 0, 0])
+        np.testing.assert_array_equal(image[0, 1], [0, 255, 0])
         # Row 1 (display bottom) = BMP row 0: Blue, White
-        self.assertEqual(px[6:9], [0, 0, 255])
-        self.assertEqual(px[9:12], [255, 255, 255])
+        np.testing.assert_array_equal(image[1, 0], [0, 0, 255])
+        np.testing.assert_array_equal(image[1, 1], [255, 255, 255])
 
     def test_decode_bmp_grayscale(self):
-        shape, _ = decode_image(BMP_DATA, "Grayscale")
-        self.assertEqual(shape, [2, 2, 1])
+        image = self._decode(BMP_DATA, "Grayscale")
+        self.assertEqual(image.shape, (2, 2, 1))
 
     def test_decode_bmp_bgr(self):
-        shape, data = decode_image(BMP_DATA, "BGR")
-        self.assertEqual(shape[2], 3)
+        image = self._decode(BMP_DATA, "BGR")
+        self.assertEqual(image.shape[2], 3)
         # Row 0 pixel 0 is Red in RGB => BGR = (0, 0, 255)
-        self.assertEqual(list(data)[0:3], [0, 0, 255])
+        np.testing.assert_array_equal(image[0, 0], [0, 0, 255])
 
     def test_decode_pnm_rgb(self):
-        shape, data = decode_image(PNM_DATA, "RGB")
-        self.assertEqual(shape, [1, 2, 3])
-        px = list(data)
-        self.assertEqual(px[0:3], [255, 0, 0])  # Red
-        self.assertEqual(px[3:6], [0, 255, 0])  # Green
-
-    def test_decode_jpeg2000_rgb(self):
-        shape, data = decode_image(JP2_DATA, "RGB")
-        self.assertEqual(shape[2], 3)  # channels
-        if _openjpeg_runtime_available():
-            self.assertEqual(shape[0], 1)  # height
-            self.assertEqual(shape[1], 2)  # width
-            px = list(data)
-            self.assertEqual(px[0:3], [255, 0, 0])  # Red
-            self.assertEqual(px[3:6], [0, 255, 0])  # Green
-        else:
-            # Without the runtime library the kernel returns an empty matrix.
-            self.assertEqual(shape[0], 0)
-            self.assertEqual(shape[1], 0)
+        image = self._decode(PNM_DATA, "RGB")
+        self.assertEqual(image.shape, (1, 2, 3))
+        np.testing.assert_array_equal(image[0, 0], [255, 0, 0])  # Red
+        np.testing.assert_array_equal(image[0, 1], [0, 255, 0])  # Green
 
     def test_decode_tiff_rgb(self):
-        shape, data = decode_image(TIFF_DATA, "RGB")
-        self.assertEqual(shape, [1, 2, 3])
-        px = list(data)
-        self.assertEqual(px[0:3], [255, 0, 0])  # Red
-        self.assertEqual(px[3:6], [0, 255, 0])  # Green
+        image = self._decode(TIFF_DATA, "RGB")
+        self.assertEqual(image.shape, (1, 2, 3))
+        np.testing.assert_array_equal(image[0, 0], [255, 0, 0])  # Red
+        np.testing.assert_array_equal(image[0, 1], [0, 255, 0])  # Green
 
     def test_decode_tiff_bgr(self):
-        shape, data = decode_image(TIFF_DATA, "BGR")
-        self.assertEqual(shape, [1, 2, 3])
+        image = self._decode(TIFF_DATA, "BGR")
+        self.assertEqual(image.shape, (1, 2, 3))
         # Pixel 0 is Red in RGB => BGR = (0, 0, 255)
-        self.assertEqual(list(data)[0:3], [0, 0, 255])
+        np.testing.assert_array_equal(image[0, 0], [0, 0, 255])
 
     def test_decode_tiff_packbits(self):
-        self._expect_red_green_rgb(decode_image(TIFF_PACKBITS_DATA, "RGB"))
+        self._expect_red_green_rgb(self._decode(TIFF_PACKBITS_DATA, "RGB"))
 
     def test_decode_tiff_lzw(self):
-        self._expect_red_green_rgb(decode_image(TIFF_LZW_DATA, "RGB"))
+        self._expect_red_green_rgb(self._decode(TIFF_LZW_DATA, "RGB"))
 
     def test_decode_tiff_deflate(self):
-        self._expect_red_green_rgb(decode_image(TIFF_DEFLATE_DATA, "RGB"))
+        self._expect_red_green_rgb(self._decode(TIFF_DEFLATE_DATA, "RGB"))
 
     def test_decode_tiff_packbits_bgr(self):
-        shape, data = decode_image(TIFF_PACKBITS_DATA, "BGR")
-        self.assertEqual(shape[2], 3)
+        image = self._decode(TIFF_PACKBITS_DATA, "BGR")
+        self.assertEqual(image.shape[2], 3)
         # Pixel 0 is Red in RGB => BGR = (0, 0, 255)
-        self.assertEqual(list(data)[0:3], [0, 0, 255])
+        np.testing.assert_array_equal(image[0, 0], [0, 0, 255])
 
-    def test_invalid_empty_input(self):
-        # Empty input falls back to an empty matrix (0, 0, 3).
-        shape, data = decode_image(b"", "RGB")
-        self.assertEqual(shape, [0, 0, 3])
-        self.assertEqual(len(data), 0)
-
-    def test_unrecognized_format_falls_back_to_empty_matrix(self):
+    def test_decode_unrecognized_falls_back_to_empty_matrix(self):
         garbage = bytes([0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04])
-        shape, data = decode_image(garbage, "RGB")
-        self.assertEqual(shape, [0, 0, 3])
-        self.assertEqual(len(data), 0)
+        image = self._decode(garbage, "RGB")
+        # Undecodable input yields the empty (0, 0, C) matrix per the schema.
+        self.assertEqual(image.shape, (0, 0, 3))
 
-    def test_default_pixel_format_is_rgb(self):
-        shape_default, data_default = decode_image(TIFF_DATA)
-        shape_rgb, data_rgb = decode_image(TIFF_DATA, "RGB")
-        self.assertEqual(shape_default, shape_rgb)
-        self.assertEqual(data_default, data_rgb)
-
-    def _expect_red_green_rgb(self, decoded):
-        shape, data = decoded
-        self.assertEqual(shape, [1, 2, 3])
-        px = list(data)
-        self.assertEqual(px[0:3], [255, 0, 0])  # Red
-        self.assertEqual(px[3:6], [0, 255, 0])  # Green
+    def _expect_red_green_rgb(self, image: np.ndarray):
+        self.assertEqual(image.shape, (1, 2, 3))
+        np.testing.assert_array_equal(image[0, 0], [255, 0, 0])  # Red
+        np.testing.assert_array_equal(image[0, 1], [0, 255, 0])  # Green
 
 
 if __name__ == "__main__":

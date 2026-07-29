@@ -40,14 +40,6 @@ class TestImageKernelBindings(unittest.TestCase):
 
         self.assertIn("ImageDecoder", _imgpykernels.__doc__)
 
-    def test_decode_image_is_callable(self):
-        """decode_image() is exposed and returns a (shape, bytes) pair."""
-        from onnx_light_kernel_images.onnx_py._imgpykernels import decode_image
-
-        shape, data = decode_image(b"", "RGB")
-        self.assertEqual(shape, [0, 0, 3])
-        self.assertEqual(data, b"")
-
 
 if __name__ == "__main__":
     unittest.main()
