@@ -39,11 +39,19 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
 
-      - name: Install OpenSSL (macOS)
+      - name: Install OpenSSL and OpenMP (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install openssl@3 || true
+          brew install openssl@3 libomp || true
           echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          # onnx-light's installed CMake config calls find_dependency(OpenMP),
+          # which is REQUIRED for every consumer. Apple Clang ships no OpenMP,
+          # so expose Homebrew's keg-only libomp through the FindOpenMP cache
+          # hints. These are consumed by the onnx-light SDK build below (via
+          # eval $CMAKE_ARGS) and by the kernel build (scikit-build-core reads
+          # CMAKE_ARGS from the environment).
+          libomp="$(brew --prefix libomp)"
+          echo "CMAKE_ARGS=-DOpenMP_ROOT=${libomp} -DOpenMP_C_FLAGS=\"-Xpreprocessor -fopenmp -I${libomp}/include\" -DOpenMP_C_LIB_NAMES=omp -DOpenMP_CXX_FLAGS=\"-Xpreprocessor -fopenmp -I${libomp}/include\" -DOpenMP_CXX_LIB_NAMES=omp -DOpenMP_omp_LIBRARY=${libomp}/lib/libomp.dylib" >> "$GITHUB_ENV"
 
       # onnx-light publishes no prebuilt C++ archive for macOS, so build and
       # install the 0.1.9 SDK from source and expose it through ONNX_LIGHT_ROOT
@@ -61,7 +69,10 @@ jobs:
         env:
           SCCACHE_GHA_ENABLED: "true"
         run: |
-          cmake -S onnx-light-src -B onnx-light-build \
+          # eval so the quoted OpenMP flags inside CMAKE_ARGS are re-parsed as
+          # single CMake arguments rather than split on their embedded spaces.
+          eval cmake -S onnx-light-src -B onnx-light-build \
+            ${CMAKE_ARGS} \
             -DCMAKE_BUILD_TYPE=Release \
             -DONNX_LIGHT_BUILD_PYTHON=OFF \
             -DONNX_LIGHT_BUILD_TESTS=OFF \
