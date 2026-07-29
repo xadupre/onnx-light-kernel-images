@@ -1,5 +1,9 @@
 # onnx-light-kernel-images
 
+[![ci-core](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml)
+[![codecov](https://codecov.io/gh/xadupre/onnx-light-kernel-images/branch/main/graph/badge.svg)](https://codecov.io/gh/xadupre/onnx-light-kernel-images)
+[![Style](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml)
+
 ImageDecoder kernel extension for
 [onnx-light](https://github.com/xadupre/onnx-light).
 
