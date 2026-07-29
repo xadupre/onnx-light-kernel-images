@@ -81,6 +81,26 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/onnx-light-install"
           cmake --build onnx-light-build --config Release
           cmake --install onnx-light-build --config Release
+          # onnx-light's install ships include/onnx_light/onnx_proto/ as a
+          # byte-identical mirror of the headers in include/onnx_light/, each
+          # guarded only by `#pragma once`. A single translation unit can pull
+          # in both physical copies (e.g. via onnx.h and an onnx_proto/ header)
+          # and fail with "redefinition". The kernel's CMakeLists collapses this
+          # mirror only when it downloads the archive itself; that patch is
+          # skipped for a user-supplied ONNX_LIGHT_ROOT, so replicate it here on
+          # the install tree we build. Only truly-identical duplicates are
+          # rewritten into a forwarding include, keeping this safe/idempotent.
+          proto_dir="${{ github.workspace }}/onnx-light-install/include/onnx_light/onnx_proto"
+          if [ -d "${proto_dir}" ]; then
+            for hdr in "${proto_dir}"/*.h "${proto_dir}"/*.hpp; do
+              [ -e "${hdr}" ] || continue
+              name="$(basename "${hdr}")"
+              parent="${{ github.workspace }}/onnx-light-install/include/onnx_light/${name}"
+              if [ -f "${parent}" ] && cmp -s "${hdr}" "${parent}"; then
+                printf '#pragma once\n#include "../%s"\n' "${name}" > "${hdr}"
+              fi
+            done
+          fi
           echo "ONNX_LIGHT_ROOT=${{ github.workspace }}/onnx-light-install" >> "$GITHUB_ENV"
 
       - name: Set parallel build level
