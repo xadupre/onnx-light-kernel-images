@@ -10,6 +10,13 @@ Install from source:
 
    pip install .
 
+Or with Pixi:
+
+.. code-block:: bash
+
+   pixi install
+   pixi run install
+
 Or build with CMake:
 
 .. code-block:: bash

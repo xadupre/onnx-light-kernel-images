@@ -39,6 +39,14 @@ described by the ONNX `ImageDecoder` schema.
 pip install .
 ```
 
+### Pixi environment
+
+```bash
+pixi install
+pixi run install
+pixi run test-python
+```
+
 ### setup.py with C++ tests
 
 ```bash
