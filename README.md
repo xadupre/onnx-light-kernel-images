@@ -92,10 +92,19 @@ target_link_libraries(my_app PRIVATE
 ## Python usage
 
 ```python
-from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels
+from onnx_light_kernel_images.onnx_py._imgpykernels import (
+    decode_image,
+    register_image_kernels,
+)
 
 # Register the kernel once before running models.
 register_image_kernels()
+
+# Or decode an encoded image bytestream directly. Returns the (H, W, C) shape
+# and the raw row-major uint8 pixel bytes. Supported pixel formats are "RGB"
+# (default), "BGR" and "Grayscale".
+with open("image.bmp", "rb") as f:
+    shape, pixels = decode_image(f.read(), "RGB")
 ```
 
 ## Testing
