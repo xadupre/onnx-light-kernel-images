@@ -14,16 +14,13 @@ NB_MODULE(_imgpykernels, m) {
             "registers the ImageDecoder kernel (BMP, TIFF, JPEG, PNG, PNM) "
             "with the onnx-light kernel dispatch table.";
 
-  m.def(
-      "register_image_kernels",
-      &onnx_light_kernel_images::RegisterImageKernels,
-      "Registers the ImageDecoder kernel (ai.onnx domain) with the onnx-light "
-      "kernel dispatch table.\n\n"
-      "Supported formats: BMP, TIFF, JPEG, PNG, PNM.\n"
-      "Idempotent: calling more than once is safe and cheap.");
+  m.def("register_image_kernels", &onnx_light_kernel_images::RegisterImageKernels,
+        "Registers the ImageDecoder kernel (ai.onnx domain) with the onnx-light "
+        "kernel dispatch table.\n\n"
+        "Supported formats: BMP, TIFF, JPEG, PNG, PNM.\n"
+        "Idempotent: calling more than once is safe and cheap.");
 
   m.def(
-      "has_image_kernels",
-      []() -> bool { return true; },
+      "has_image_kernels", []() -> bool { return true; },
       "Returns True when the image kernel extension is available.");
 }

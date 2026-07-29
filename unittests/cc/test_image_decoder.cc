@@ -59,11 +59,25 @@ const unsigned char kBmpData[] = {
 
 // Minimal PNM P6 (binary RGB) 2x1 image.
 const unsigned char kPnmData[] = {
-    'P', '6', '\n', '2', ' ', '1', '\n', '2', '5', '5', '\n',
+    'P',
+    '6',
+    '\n',
+    '2',
+    ' ',
+    '1',
+    '\n',
+    '2',
+    '5',
+    '5',
+    '\n',
     // pixel (0,0) RGB = (255, 0, 0) = Red
-    0xFF, 0x00, 0x00,
+    0xFF,
+    0x00,
+    0x00,
     // pixel (0,1) RGB = (0, 255, 0) = Green
-    0x00, 0xFF, 0x00,
+    0x00,
+    0xFF,
+    0x00,
 };
 
 Tensor MakeEncodedTensor(const unsigned char *data, size_t size) {

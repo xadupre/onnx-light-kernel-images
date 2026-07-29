@@ -108,7 +108,9 @@ except ModuleNotFoundError:
         cmake_args = _cmake_args_from_env()
         cmake_args = _set_cmake_default_define(cmake_args, "CMAKE_BUILD_TYPE", "Release")
         if cpp_tests:
-            cmake_args = _set_cmake_define(cmake_args, "ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS", "ON")
+            cmake_args = _set_cmake_define(
+                cmake_args, "ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS", "ON"
+            )
         _spawn(
             [
                 "cmake",
@@ -183,7 +185,9 @@ class BuildExt(Command):
         cmake_args = _cmake_args_from_env()
         cmake_args = _set_cmake_default_define(cmake_args, "CMAKE_BUILD_TYPE", "Release")
         if self.cpp_tests:
-            cmake_args = _set_cmake_define(cmake_args, "ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS", "ON")
+            cmake_args = _set_cmake_define(
+                cmake_args, "ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS", "ON"
+            )
 
         self.spawn(
             [
