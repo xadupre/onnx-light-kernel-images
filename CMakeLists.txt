@@ -131,7 +131,7 @@ endif()
 
 add_library(lib_onnx_light_kernel_images ${_img_lib_type} ${KERNEL_IMAGES_SOURCES})
 target_include_directories(lib_onnx_light_kernel_images PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 set_property(TARGET lib_onnx_light_kernel_images PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -170,7 +170,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
 
   nanobind_add_module(_imgpykernels STABLE_ABI ${PY_KERNELS_SOURCES})
   target_include_directories(_imgpykernels PRIVATE
-      "${CMAKE_CURRENT_SOURCE_DIR}/include")
+      "${CMAKE_CURRENT_SOURCE_DIR}")
   target_link_libraries(_imgpykernels PRIVATE lib_onnx_light_kernel_images)
 
   # Set RPATH so the extension finds liblib_onnx_light_kernel_images.so
@@ -203,8 +203,10 @@ if(ONNX_LIGHT_KERNEL_IMAGES_INSTALL)
       LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-  install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/onnx_light_kernel_images"
-      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/register_image_kernels.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/tiff_compression.h"
+      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/onnx_light_kernel_images")
 
   include(CMakePackageConfigHelpers)
   write_basic_package_version_file(
@@ -250,7 +252,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
       onnx_light::lib_onnx_proto
       GTest::gtest_main)
   target_include_directories(test_image_decoder PRIVATE
-      "${CMAKE_CURRENT_SOURCE_DIR}/include")
+      "${CMAKE_CURRENT_SOURCE_DIR}")
 
   include(GoogleTest)
   gtest_discover_tests(test_image_decoder)
