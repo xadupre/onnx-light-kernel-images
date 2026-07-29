@@ -641,9 +641,22 @@ bool RewriteCompressedTiff(const uint8_t *data, size_t size, std::vector<uint8_t
   if (strip_offsets.empty() || strip_offsets.size() != strip_bytecounts.size())
     return false;
 
-  // Decompress every strip and concatenate into one row-major buffer.
+  // Expected number of decoded bytes for the whole image. Computed with 64-bit
+  // arithmetic so a crafted width/height cannot overflow, and used both to
+  // bound the reservation below and to validate the decompressed size.
+  uint64_t expected64 = static_cast<uint64_t>(width) * height * samples_per_pixel;
+
+  // Decompress every strip and concatenate into one row-major buffer. The
+  // reservation is capped so a crafted image with huge dimensions but tiny
+  // strip data cannot trigger an oversized allocation; correctness does not
+  // depend on it.
   std::vector<uint8_t> raw;
-  raw.reserve(static_cast<size_t>(width) * height * samples_per_pixel);
+  uint64_t total_strip_bytes = 0;
+  for (uint64_t bc : strip_bytecounts)
+    total_strip_bytes += bc;
+  uint64_t reserve_hint = expected64 < total_strip_bytes ? expected64 : total_strip_bytes;
+  constexpr uint64_t kReserveCap = 64ull * 1024 * 1024;
+  raw.reserve(static_cast<size_t>(reserve_hint < kReserveCap ? reserve_hint : kReserveCap));
   for (size_t i = 0; i < strip_offsets.size(); ++i) {
     size_t off = static_cast<size_t>(strip_offsets[i]);
     size_t len = static_cast<size_t>(strip_bytecounts[i]);
@@ -670,7 +683,7 @@ bool RewriteCompressedTiff(const uint8_t *data, size_t size, std::vector<uint8_t
       return false;
   }
 
-  size_t expected = static_cast<size_t>(width) * height * samples_per_pixel;
+  size_t expected = static_cast<size_t>(expected64);
   if (raw.size() < expected)
     return false;
   raw.resize(expected); // drop any padding beyond the image.
