@@ -1,0 +1,102 @@
+# onnx-light-kernel-images
+
+ImageDecoder kernel extension for
+[onnx-light](https://github.com/xadupre/onnx-light).
+
+Registers the ONNX `ImageDecoder` operator (ai.onnx, since opset 20) with the
+onnx-light kernel dispatch table. The kernel decodes encoded image bytestreams
+into `(H, W, C)` `tensor(uint8)` arrays in channel-last layout.
+
+## Supported formats
+
+| Format | Variants |
+|--------|----------|
+| **BMP** | 24-bit uncompressed (BI_RGB, BITMAPINFOHEADER) |
+| **TIFF** | Uncompressed baseline (8-bit per sample, chunky) |
+| **JPEG** | Baseline JFIF (SOF0, 8-bit, 1 or 3 components) |
+| **PNG** | 8-bit non-interlaced grayscale / truecolor |
+| **PNM** | Netpbm family (P1–P6 with 8-bit samples) |
+
+## Build from source
+
+### Prerequisites
+
+- C++20 compiler
+- CMake ≥ 3.15
+- Python ≥ 3.10
+- [nanobind](https://github.com/wjakob/nanobind) ≥ 1.3.2
+
+### Python wheel (recommended)
+
+```bash
+pip install .
+```
+
+### setup.py with C++ tests
+
+```bash
+python setup.py build_ext --inplace --cpp-tests
+```
+
+### Pure CMake (C++ only)
+
+```bash
+cmake -S . -B build -DONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON \
+      -DONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON=OFF
+cmake --build build
+ctest --test-dir build
+```
+
+The build automatically downloads the onnx-light 0.1.9 C++ release archive.
+To use a custom install, set `-DONNX_LIGHT_ROOT=/path/to/onnx-light-cpp`.
+
+## C++ usage
+
+```cpp
+#include <onnx_light_kernel_images/register_image_kernels.h>
+
+int main() {
+    // Register the ImageDecoder kernel once before running models.
+    onnx_light_kernel_images::RegisterImageKernels();
+    // ... use onnx-light RuntimeSession with ImageDecoder nodes ...
+}
+```
+
+Link against `onnx_light_kernel_images::lib_onnx_light_kernel_images`:
+
+```cmake
+find_package(onnx_light_kernel_images REQUIRED)
+target_link_libraries(my_app PRIVATE
+    onnx_light_kernel_images::lib_onnx_light_kernel_images)
+```
+
+## Python usage
+
+```python
+from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels
+
+# Register the kernel once before running models.
+register_image_kernels()
+```
+
+## Testing
+
+### C++ tests
+
+```bash
+cmake -S . -B build -DONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON \
+      -DONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON=OFF
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+### Python tests
+
+```bash
+pip install -e .
+pytest unittests/python/
+```
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).

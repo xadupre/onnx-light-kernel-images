@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(onnx_light REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/onnx_light_kernel_imagesTargets.cmake")
+
+check_required_components(onnx_light_kernel_images)
