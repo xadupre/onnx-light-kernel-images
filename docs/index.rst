@@ -5,6 +5,7 @@ onnx-light-kernel-images
    :maxdepth: 2
 
    getting_started
+   kernels
    api
 
 .. include:: ../README.md
