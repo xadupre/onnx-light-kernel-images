@@ -17,7 +17,9 @@ Python API
    Registers the ``ImageDecoder`` kernel (ai.onnx domain) with the onnx-light
    kernel dispatch table.
 
-   Supported formats: BMP, TIFF, JPEG, PNG, PNM.
+   Supported formats: BMP, TIFF, JPEG, JPEG2000, PNG, WebP, PNM. JPEG2000 and
+   WebP are decoded through the ``libopenjp2`` and ``libwebp`` shared
+   libraries, loaded dynamically at runtime.
 
    Idempotent: calling more than once is safe and cheap.
 
