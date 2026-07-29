@@ -98,6 +98,21 @@ from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernel
 register_image_kernels()
 ```
 
+The extension also exposes a convenience `decode_image` helper that decodes an
+encoded image bytestream into a channel-last `(H, W, C)` `uint8` NumPy array
+using the same `ImageDecoder` kernel:
+
+```python
+from onnx_light_kernel_images.onnx_py._imgpykernels import decode_image
+
+with open("picture.png", "rb") as f:
+    pixels = decode_image(f.read(), "RGB")  # -> (H, W, C) uint8 ndarray
+```
+
+See the [examples gallery](docs/auto_examples/index.html) for a script that
+saves an image in every supported format with Pillow and reloads each one with
+`decode_image`.
+
 ## Testing
 
 ### C++ tests

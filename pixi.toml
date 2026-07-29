@@ -28,7 +28,10 @@ ruff = "*"
 pydata-sphinx-theme = "*"
 sphinx = ">=7"
 sphinx-copybutton = "*"
+sphinx-gallery = "*"
 myst-parser = "*"
+pillow = "*"
+matplotlib = "*"
 
 [tasks]
 install = "pip install --no-build-isolation -e .[dev]"

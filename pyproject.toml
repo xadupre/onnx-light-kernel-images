@@ -23,7 +23,10 @@ docs = [
     "pydata-sphinx-theme",
     "sphinx>=7",
     "sphinx-copybutton",
+    "sphinx-gallery",
     "myst-parser",
+    "pillow",
+    "matplotlib",
 ]
 
 [tool.scikit-build]
@@ -46,3 +49,4 @@ select = [
 [tool.ruff.lint.extend-per-file-ignores]
 "**" = ["RUF012", "RUF100", "SIM102", "SIM108", "UP006", "UP007", "UP035"]
 "unittests/**" = ["B023", "B904", "E731"]
+"examples/**" = ["E402"]
