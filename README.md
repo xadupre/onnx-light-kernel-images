@@ -14,8 +14,15 @@ into `(H, W, C)` `tensor(uint8)` arrays in channel-last layout.
 | **BMP** | 24-bit uncompressed (BI_RGB, BITMAPINFOHEADER) |
 | **TIFF** | Baseline 8-bit-per-sample chunky, uncompressed or compressed with PackBits, LZW or Deflate/ZIP (with optional horizontal predictor) |
 | **JPEG** | Baseline JFIF (SOF0, 8-bit, 1 or 3 components) |
+| **JPEG2000** | JP2 file format and raw J2K codestream (via `libopenjp2`) |
 | **PNG** | 8-bit non-interlaced grayscale / truecolor |
+| **WebP** | Decoded via `libwebp` |
 | **PNM** | Netpbm family (P1–P6 with 8-bit samples) |
+
+JPEG2000 and WebP are decoded through the OpenJPEG (`libopenjp2`) and
+`libwebp` shared libraries, which are loaded dynamically at runtime. When the
+corresponding library is not available the decoder returns an empty matrix, as
+described by the ONNX `ImageDecoder` schema.
 
 ## Build from source
 

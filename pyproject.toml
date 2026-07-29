@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "onnx-light-kernel-images"
 version = "0.1.0"
-description = "ImageDecoder kernel for onnx-light (BMP, TIFF, JPEG, PNG, PNM)"
+description = "ImageDecoder kernel for onnx-light (BMP, TIFF, JPEG, JPEG2000, PNG, WebP, PNM)"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
