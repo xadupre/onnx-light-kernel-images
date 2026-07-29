@@ -1,12 +1,14 @@
 # Copyright (c) ONNX Project Contributors
 #
 # SPDX-License-Identifier: Apache-2.0
-"""Sphinx extension rendering the repository's registered kernels as a table.
+"""Sphinx extension rendering this repository's own registered kernels as a table.
 
-Provides the ``onnx-light-kernels`` directive which scans the C++ registration
-sources (see :mod:`kernel_scan`) and emits a table with one row per registered
-kernel. Because the table is generated at build time, it always reflects the
-kernels the repository actually registers.
+Provides the ``registered-kernels`` directive which scans **this repository's**
+C++ registration sources (see :mod:`kernel_scan`) and emits a table with one row
+per registered kernel. Only kernels added by this repository
+(``onnx-light-kernel-images``) are listed; the kernels shipped by onnx-light
+itself are not scanned. Because the table is generated at build time, it always
+reflects the kernels this repository actually registers.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ def _row(cells: Sequence[str]) -> nodes.row:
 
 def _build_table(kernels: List[Kernel]) -> nodes.table:
     table = nodes.table()
-    table["classes"].append("onnx-light-kernels")
+    table["classes"].append("registered-kernels")
     tgroup = nodes.tgroup(cols=len(_HEADERS))
     table += tgroup
     for _ in _HEADERS:
@@ -50,7 +52,7 @@ def _build_table(kernels: List[Kernel]) -> nodes.table:
     return table
 
 
-class OnnxLightKernelsDirective(Directive):
+class RegisteredKernelsDirective(Directive):
     """Render a table of the kernels registered by this repository."""
 
     has_content = False
@@ -68,7 +70,7 @@ class OnnxLightKernelsDirective(Directive):
         kernels = find_registered_kernels(root, globs)
         if not kernels:
             warning = self.state_machine.reporter.warning(
-                "onnx-light-kernels: no registered kernels found under "
+                "registered-kernels: no registered kernels found under "
                 f"{root} for globs {globs}.",
                 line=self.lineno,
             )
@@ -79,7 +81,7 @@ class OnnxLightKernelsDirective(Directive):
 
 
 def setup(app):
-    app.add_directive("onnx-light-kernels", OnnxLightKernelsDirective)
+    app.add_directive("registered-kernels", RegisteredKernelsDirective)
     return {
         "version": "0.1.0",
         "parallel_read_safe": True,

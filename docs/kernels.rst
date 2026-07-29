@@ -1,12 +1,14 @@
 Available Kernels
 =================
 
-The table below lists the kernels registered by this repository with the
-onnx-light kernel dispatch table. It is generated automatically at
-documentation build time by scanning the C++ registration sources, so it always
-reflects the kernels the repository actually provides.
+The table below lists the kernels **provided by this repository**
+(``onnx-light-kernel-images``). It does not include the kernels that come with
+onnx-light itself. The list is generated automatically at documentation build
+time by scanning this repository's own C++ registration sources
+(``onnx_light_kernel_images/**/*.cc``), so it always reflects the kernels this
+repository actually adds.
 
-.. onnx-light-kernels::
+.. registered-kernels::
 
 Each kernel is registered for the given operator, ONNX domain and device. The
 ``ImageDecoder`` kernel decodes encoded image bytestreams into ``(H, W, C)``
