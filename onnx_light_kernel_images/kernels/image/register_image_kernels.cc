@@ -16,11 +16,11 @@ namespace onnx_light_kernel_images {
 
 namespace {
 
+using ::onnx_light::NodeProto;
 using ::onnx_light::core::runtime::KernelBase;
 using ::onnx_light::core::runtime::NodeKernelFn;
 using ::onnx_light::core::runtime::RegisterKernelFn;
 using ::onnx_light::core::runtime::RuntimeContext;
-using ::onnx_light::NodeProto;
 using ::onnx_light::onnx_kernels::kernel::ImageDecoder;
 
 template <class KernelT> NodeKernelFn MakeKernel() {
@@ -39,8 +39,7 @@ void RegisterImageKernels() {
     return;
   }
   registered = true;
-  RegisterKernelFn("ai.onnx", "ImageDecoder",
-                   onnx_light::core::symbolic::Device::kCPU,
+  RegisterKernelFn("ai.onnx", "ImageDecoder", onnx_light::core::symbolic::Device::kCPU,
                    MakeKernel<ImageDecoder>());
 }
 

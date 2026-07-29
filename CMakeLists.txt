@@ -63,6 +63,40 @@ if(NOT DEFINED ONNX_LIGHT_ROOT)
   )
   FetchContent_MakeAvailable(onnx_light_cpp)
 
+  # -------------------------------------------------------------------------
+  # Work around a packaging quirk in the onnx-light 0.1.9 prebuilt archives:
+  # include/onnx_light/onnx_proto/ ships byte-identical copies of the headers
+  # in include/onnx_light/ (onnx.h, fields.h, stream*.h, ...), each guarded
+  # only by `#pragma once`. MSVC resolves a quoted `#include "onnx.h"` against
+  # the directories of every header on the current include stack, so a single
+  # translation unit can pull in *both* physical copies and fail with C2011
+  # "class type redefinition" (GCC/Clang resolve to a single copy and are
+  # unaffected). Replace each duplicated onnx_proto/ header with a thin
+  # forwarding include so every include path converges on one physical file.
+  # Only the archive we downloaded ourselves is patched; a user-supplied
+  # ONNX_LIGHT_ROOT is never modified. The SHA256 guard keeps this idempotent
+  # and skips headers that legitimately differ from their parent copy.
+  # -------------------------------------------------------------------------
+  set(_onnx_light_proto_dir
+      "${onnx_light_cpp_SOURCE_DIR}/include/onnx_light/onnx_proto")
+  if(IS_DIRECTORY "${_onnx_light_proto_dir}")
+    file(GLOB _onnx_light_proto_headers
+         "${_onnx_light_proto_dir}/*.h" "${_onnx_light_proto_dir}/*.hpp")
+    foreach(_onnx_light_hdr IN LISTS _onnx_light_proto_headers)
+      get_filename_component(_onnx_light_hdr_name "${_onnx_light_hdr}" NAME)
+      set(_onnx_light_parent_hdr
+          "${onnx_light_cpp_SOURCE_DIR}/include/onnx_light/${_onnx_light_hdr_name}")
+      if(EXISTS "${_onnx_light_parent_hdr}")
+        file(SHA256 "${_onnx_light_hdr}" _onnx_light_hash_proto)
+        file(SHA256 "${_onnx_light_parent_hdr}" _onnx_light_hash_parent)
+        if(_onnx_light_hash_proto STREQUAL _onnx_light_hash_parent)
+          file(WRITE "${_onnx_light_hdr}"
+"#pragma once\n// Forwarding stub written by onnx-light-kernel-images to collapse the\n// duplicated onnx_proto/ header mirror onto a single physical file so MSVC\n// does not hit `#pragma once` class redefinitions (see CMakeLists.txt).\n#include \"../${_onnx_light_hdr_name}\"\n")
+        endif()
+      endif()
+    endforeach()
+  endif()
+
   set(ONNX_LIGHT_ROOT "${onnx_light_cpp_SOURCE_DIR}")
 endif()
 
