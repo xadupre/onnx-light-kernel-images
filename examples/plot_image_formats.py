@@ -9,11 +9,13 @@ bytestream with the ONNX ``ImageDecoder`` operator provided by
 
 For lossless formats (BMP, PNG, PNM/PPM, and TIFF — including the PackBits,
 LZW and Deflate compressions) the decoded pixels must match the original array
-exactly. For lossy formats (JPEG) only the shape is guaranteed, so the example
-just reports the mean absolute error. JPEG2000 and WebP are decoded through the
-optional ``libopenjp2`` / ``libwebp`` runtime libraries; when they are not
-available on the machine the decoder returns an empty ``(0, 0, C)`` matrix (as
-described by the ONNX ``ImageDecoder`` schema) and the example simply notes it.
+exactly. For the remaining formats (JPEG, JPEG2000 and WebP) the example
+reports the mean absolute error instead of asserting an exact match: JPEG is
+lossy, while JPEG2000 and WebP are decoded through the optional ``libopenjp2``
+/ ``libwebp`` runtime libraries and may apply a color transform. When those
+libraries are not available on the machine the decoder returns an empty
+``(0, 0, C)`` matrix (as described by the ONNX ``ImageDecoder`` schema) and the
+example simply notes it.
 
 The heavy lifting happens in a single call:
 
@@ -70,8 +72,8 @@ cases = [
     ("TIFF (lzw)", {"format": "TIFF", "compression": "tiff_lzw"}, True),
     ("TIFF (deflate)", {"format": "TIFF", "compression": "tiff_adobe_deflate"}, True),
     ("JPEG", {"format": "JPEG", "quality": 95}, False),
-    ("JPEG2000", {"format": "JPEG2000"}, True),
-    ("WebP", {"format": "WEBP", "lossless": True}, True),
+    ("JPEG2000", {"format": "JPEG2000"}, False),
+    ("WebP", {"format": "WEBP", "lossless": True}, False),
 ]
 
 results = []
