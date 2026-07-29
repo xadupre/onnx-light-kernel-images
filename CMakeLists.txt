@@ -16,6 +16,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS "Build C++ unit tests." OFF)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON "Build Python extension." ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_INSTALL "Install the C++ library and headers." ON)
+option(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE
+       "Instrument the C++ targets for code coverage (GCC/Clang only)." OFF)
+
+if(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE AND
+   NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  message(FATAL_ERROR
+      "ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE requires a GCC or Clang "
+      "compiler; got '${CMAKE_CXX_COMPILER_ID}'.")
+endif()
 
 if(MSVC)
   if(NOT CMAKE_GENERATOR MATCHES "Ninja")
@@ -141,6 +150,15 @@ target_link_libraries(lib_onnx_light_kernel_images PUBLIC
     onnx_light::lib_onnx_core
     onnx_light::lib_onnx_proto
 )
+
+# Coverage instrumentation is applied PUBLIC so it propagates to the C++ test
+# executable that links this library, letting gcov emit .gcno/.gcda data for
+# both the kernel sources and the tests exercising them.
+if(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE)
+  target_compile_options(lib_onnx_light_kernel_images PUBLIC
+      --coverage -O0 -g)
+  target_link_options(lib_onnx_light_kernel_images PUBLIC --coverage)
+endif()
 
 # ---------------------------------------------------------------------------
 # Python extension: _imgpykernels

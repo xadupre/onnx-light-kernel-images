@@ -1,0 +1,107 @@
+name: cpp-coverage-weekly
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every Monday at 05:00 UTC.
+    - cron: "0 5 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpp-coverage:
+    name: C++ coverage (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history so the "commit in the past week" check can inspect
+          # commit dates rather than just the tip commit.
+          fetch-depth: 0
+
+      # Skip the (relatively expensive) coverage build on scheduled runs when
+      # no commit landed on the branch during the previous week. Manual
+      # workflow_dispatch runs always proceed.
+      - name: Check for commits in the past week
+        id: recent
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run requested; proceeding."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$(git log --since='7 days ago' --format=%H)" ]; then
+            echo "Found commits in the past week; proceeding."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No commits in the past week; skipping coverage."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.recent.outputs.run == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      # The ImageDecoder kernel decodes JPEG2000 and WebP through the OpenJPEG
+      # and libwebp shared libraries, loaded dynamically at runtime. Install
+      # them so those decoders are exercised by the C++ tests.
+      - name: Install runtime image codecs and gcovr
+        if: steps.recent.outputs.run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libopenjp2-7 libwebp7
+          python -m pip install --upgrade pip
+          python -m pip install gcovr
+
+      # Build the C++ library and tests directly with CMake (Python extension
+      # disabled) so the coverage flags apply cleanly. A Debug/-O0 build keeps
+      # the gcov line mapping accurate.
+      - name: Configure with coverage
+        if: steps.recent.outputs.run == 'true'
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON \
+            -DONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON=OFF \
+            -DONNX_LIGHT_KERNEL_IMAGES_INSTALL=OFF \
+            -DONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE=ON
+
+      - name: Build
+        if: steps.recent.outputs.run == 'true'
+        run: cmake --build build --parallel
+
+      - name: Run C++ unit tests
+        if: steps.recent.outputs.run == 'true'
+        run: ctest --test-dir build --output-on-failure --timeout 240
+
+      - name: Generate coverage report
+        if: steps.recent.outputs.run == 'true'
+        run: |
+          gcovr --root . \
+            --filter 'onnx_light_kernel_images/' \
+            --filter 'include/' \
+            --gcov-ignore-parse-errors \
+            --xml-pretty --output coverage.xml \
+            --print-summary
+
+      - name: Upload coverage artifact
+        if: steps.recent.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-coverage
+          path: coverage.xml
+
+      - name: Upload coverage to Codecov
+        if: steps.recent.outputs.run == 'true'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          flags: cpp
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
