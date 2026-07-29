@@ -48,6 +48,15 @@ jobs:
         with:
           arch: x64
 
+      # The ImageDecoder kernel decodes JPEG2000 and WebP through the OpenJPEG
+      # and libwebp shared libraries, loaded dynamically at runtime. Install
+      # them so those decoders are exercised by the C++ tests.
+      - name: Install runtime image codecs (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libopenjp2-7 libwebp7
+
       # sccache caches compiled objects in the GitHub Actions cache so repeated
       # runs that do not touch C++ sources are near-instant.
       - name: Build and install package (Linux)
