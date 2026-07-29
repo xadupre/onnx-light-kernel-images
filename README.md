@@ -12,7 +12,7 @@ into `(H, W, C)` `tensor(uint8)` arrays in channel-last layout.
 | Format | Variants |
 |--------|----------|
 | **BMP** | 24-bit uncompressed (BI_RGB, BITMAPINFOHEADER) |
-| **TIFF** | Uncompressed baseline (8-bit per sample, chunky) |
+| **TIFF** | Baseline 8-bit-per-sample chunky, uncompressed or compressed with PackBits, LZW or Deflate/ZIP (with optional horizontal predictor) |
 | **JPEG** | Baseline JFIF (SOF0, 8-bit, 1 or 3 components) |
 | **JPEG2000** | JP2 file format and raw J2K codestream (via `libopenjp2`) |
 | **PNG** | 8-bit non-interlaced grayscale / truecolor |

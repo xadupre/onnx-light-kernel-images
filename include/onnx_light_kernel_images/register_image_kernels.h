@@ -32,7 +32,9 @@ namespace onnx_light_kernel_images {
  *
  * Supported image formats:
  *   - **BMP** — 24-bit uncompressed (BI_RGB, BITMAPINFOHEADER)
- *   - **TIFF** — uncompressed baseline (8-bit per sample, chunky)
+ *   - **TIFF** — baseline 8-bit-per-sample chunky, uncompressed or
+ *     compressed with PackBits, LZW or Deflate/ZIP (with optional
+ *     horizontal predictor)
  *   - **JPEG** — baseline JFIF (SOF0, 8-bit, 1 or 3 components)
  *   - **PNG** — 8-bit non-interlaced grayscale / truecolor
  *   - **PNM** — Netpbm family (P1–P6 with 8-bit samples)

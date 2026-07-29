@@ -113,6 +113,7 @@ find_package(OpenSSL QUIET)
 # ---------------------------------------------------------------------------
 set(KERNEL_IMAGES_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/kernels/image/register_image_kernels.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/kernels/image/tiff_compression.cc"
 )
 
 set(PY_KERNELS_SOURCES
