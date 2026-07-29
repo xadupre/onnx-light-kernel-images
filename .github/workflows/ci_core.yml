@@ -79,4 +79,15 @@ jobs:
         run: ctest --test-dir build --output-on-failure -C Release --timeout 240
 
       - name: Run Python tests
-        run: pytest --durations=10 unittests
+        run: pytest --durations=10 --cov=onnx_light_kernel_images --cov-report=xml --cov-report=term-missing unittests
+
+      # Upload the Python coverage report so the Codecov badge in the README
+      # reflects the current line coverage.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          flags: python-${{ runner.os }}
+          name: python-${{ matrix.os }}-py${{ matrix.python-version }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
