@@ -80,6 +80,29 @@ const unsigned char kPnmData[] = {
     0x00,
 };
 
+// Minimal little-endian baseline uncompressed RGB TIFF, 2x1 (chunky,
+// 8 bits per sample). Pixel (0,0) = Red (255,0,0), pixel (0,1) = Green
+// (0,255,0). BitsPerSample is stored out-of-line as [8, 8, 8].
+// clang-format off
+const unsigned char kTiffData[] = {
+    0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, // header: "II", 42, IFD@8
+    0x09, 0x00,                                     // 9 IFD entries
+    0x00, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, // ImageWidth=2
+    0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, // ImageLength=1
+    0x02, 0x01, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x7A, 0x00, 0x00, 0x00, // BitsPerSample@122
+    0x03, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, // Compression=none
+    0x06, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, // Photometric=RGB
+    0x11, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, // StripOffsets@128
+    0x15, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, // SamplesPerPixel=3
+    0x16, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, // RowsPerStrip=1
+    0x17, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, // StripByteCounts=6
+    0x00, 0x00, 0x00, 0x00,                         // next IFD = 0
+    0x08, 0x00, 0x08, 0x00, 0x08, 0x00,             // BitsPerSample = [8, 8, 8]
+    0xFF, 0x00, 0x00,                               // pixel (0,0) RGB = Red
+    0x00, 0xFF, 0x00,                               // pixel (0,1) RGB = Green
+};
+// clang-format on
+
 Tensor MakeEncodedTensor(const unsigned char *data, size_t size) {
   Tensor t;
   t.data_type = static_cast<int32_t>(DataType::UINT8);
@@ -185,6 +208,46 @@ TEST_F(ImageDecoderTest, DecodePnmRgb) {
   EXPECT_EQ(p[3], 0);
   EXPECT_EQ(p[4], 255);
   EXPECT_EQ(p[5], 0);
+}
+
+TEST_F(ImageDecoderTest, DecodeTiffRgb) {
+  KernelContext ctx(core::runtime::DefaultOpset(20));
+  ImageDecoder decoder(ctx);
+  Tensor encoded = MakeEncodedTensor(kTiffData, sizeof(kTiffData));
+  Tensor result = decoder(encoded, "RGB");
+
+  ASSERT_EQ(result.shape.size(), 3u);
+  EXPECT_EQ(result.shape[0], 1); // height
+  EXPECT_EQ(result.shape[1], 2); // width
+  EXPECT_EQ(result.shape[2], 3); // channels
+
+  const uint8_t *p = result.bytes();
+  // Pixel 0: Red
+  EXPECT_EQ(p[0], 255);
+  EXPECT_EQ(p[1], 0);
+  EXPECT_EQ(p[2], 0);
+  // Pixel 1: Green
+  EXPECT_EQ(p[3], 0);
+  EXPECT_EQ(p[4], 255);
+  EXPECT_EQ(p[5], 0);
+}
+
+TEST_F(ImageDecoderTest, DecodeTiffBgr) {
+  KernelContext ctx(core::runtime::DefaultOpset(20));
+  ImageDecoder decoder(ctx);
+  Tensor encoded = MakeEncodedTensor(kTiffData, sizeof(kTiffData));
+  Tensor result = decoder(encoded, "BGR");
+
+  ASSERT_EQ(result.shape.size(), 3u);
+  EXPECT_EQ(result.shape[0], 1);
+  EXPECT_EQ(result.shape[1], 2);
+  EXPECT_EQ(result.shape[2], 3);
+
+  const uint8_t *p = result.bytes();
+  // Pixel 0 is Red in RGB => BGR = (0, 0, 255)
+  EXPECT_EQ(p[0], 0);   // B
+  EXPECT_EQ(p[1], 0);   // G
+  EXPECT_EQ(p[2], 255); // R
 }
 
 TEST_F(ImageDecoderTest, InvalidInputThrows) {
