@@ -12,7 +12,7 @@ into `(H, W, C)` `tensor(uint8)` arrays in channel-last layout.
 | Format | Variants |
 |--------|----------|
 | **BMP** | 24-bit uncompressed (BI_RGB, BITMAPINFOHEADER) |
-| **TIFF** | Uncompressed baseline (8-bit per sample, chunky) |
+| **TIFF** | Baseline 8-bit-per-sample chunky, uncompressed or compressed with PackBits, LZW or Deflate/ZIP (with optional horizontal predictor) |
 | **JPEG** | Baseline JFIF (SOF0, 8-bit, 1 or 3 components) |
 | **PNG** | 8-bit non-interlaced grayscale / truecolor |
 | **PNM** | Netpbm family (P1–P6 with 8-bit samples) |
