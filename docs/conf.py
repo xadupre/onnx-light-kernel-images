@@ -12,11 +12,18 @@ author = "xadupre"
 extensions = [
     "myst_parser",
     "sphinx_copybutton",
+    "sphinx_gallery.gen_gallery",
     "onnx_kernels",
 ]
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build"]
+
+sphinx_gallery_conf = {
+    "examples_dirs": "../examples",
+    "gallery_dirs": "auto_examples",
+    "filename_pattern": r"/plot_",
+}
 
 html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]

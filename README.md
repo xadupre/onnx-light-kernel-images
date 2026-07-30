@@ -117,6 +117,14 @@ from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernel
 register_image_kernels()
 ```
 
+Once the kernels are registered, build an ``ImageDecoder`` ONNX model and run it
+through onnx-light's ``ReferenceEvaluator``, feeding the encoded bytestream as a
+``uint8`` tensor and reading back the decoded ``(H, W, C)`` ``uint8`` image.
+
+See the [examples gallery](docs/auto_examples/index.html) for a script that
+saves an image in every supported format with Pillow and reloads each one
+through such a model.
+
 ## Testing
 
 ### C++ tests

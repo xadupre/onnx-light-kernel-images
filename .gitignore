@@ -51,6 +51,8 @@ cover/
 
 # Sphinx documentation
 docs/_build/
+docs/auto_examples/
+docs/sg_execution_times.rst
 
 # mypy
 .mypy_cache/
