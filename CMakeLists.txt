@@ -24,6 +24,11 @@ option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS
 set(ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS "address"
     CACHE STRING
     "Comma-separated sanitizer list for fuzz harnesses (in addition to 'fuzzer').")
+option(ONNX_HARDENING
+    "Enable OpenSSF Compiler Hardening Guide flags for C/C++ targets. \
+See cmake/Hardening.cmake and \
+https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html"
+    OFF)
 
 if(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE AND
    NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -40,6 +45,17 @@ endif()
 
 include(GNUInstallDirs)
 include(FetchContent)
+
+# Optional OpenSSF compiler hardening flags. Resolves the list of supported
+# flags up front so each target definition can call onnx_light_apply_hardening
+# unconditionally.
+if(ONNX_HARDENING)
+  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+  include(Hardening)
+else()
+  function(onnx_light_apply_hardening target)
+  endfunction()
+endif()
 
 # ---------------------------------------------------------------------------
 # Locate onnx-light C++ SDK (0.1.9 release)
@@ -343,3 +359,21 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS)
   target_compile_features(make_seed_corpus PRIVATE cxx_std_20)
   set_property(TARGET make_seed_corpus PROPERTY FOLDER "Fuzzers")
 endif()
+
+# ---------------------------------------------------------------------------
+# Apply OpenSSF compiler hardening flags to this project's targets when
+# ONNX_HARDENING=ON. When the option is OFF the helper is a no-op so the loop
+# has no effect.
+# ---------------------------------------------------------------------------
+set(_onnx_light_kernel_images_hardening_targets lib_onnx_light_kernel_images)
+if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
+  list(APPEND _onnx_light_kernel_images_hardening_targets _imgpykernels)
+endif()
+if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
+  list(APPEND _onnx_light_kernel_images_hardening_targets test_image_decoder)
+endif()
+foreach(_t IN LISTS _onnx_light_kernel_images_hardening_targets)
+  if(TARGET ${_t})
+    onnx_light_apply_hardening(${_t})
+  endif()
+endforeach()
