@@ -114,6 +114,16 @@ const unsigned char kJp2Data[] = {
 };
 // clang-format on
 
+// Minimal lossless WebP (VP8L) 2x1 image. Pixel (0,0) RGB = Red,
+// pixel (0,1) = Green. Decoded by the ImageDecoder through libwebp.
+// clang-format off
+const unsigned char kWebpData[] = {
+    0x52, 0x49, 0x46, 0x46, 0x18, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+    0x56, 0x50, 0x38, 0x4C, 0x0C, 0x00, 0x00, 0x00, 0x2F, 0x01, 0x00, 0x00,
+    0x00, 0x98, 0xFF, 0xF9, 0x8F, 0xFE, 0x87, 0x01,
+};
+// clang-format on
+
 // Minimal little-endian baseline uncompressed RGB TIFF, 2x1 (chunky,
 // 8 bits per sample). Pixel (0,0) = Red (255,0,0), pixel (0,1) = Green
 // (0,255,0). BitsPerSample is stored out-of-line as [8, 8, 8].
@@ -210,6 +220,32 @@ bool OpenJpegRuntimeAvailable() {
   return false;
 #else
   for (const char *name : {"libopenjp2.so.7", "libopenjp2.so"}) {
+    void *handle = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
+    if (handle != nullptr) {
+      dlclose(handle);
+      return true;
+    }
+  }
+  return false;
+#endif
+}
+
+// Attempts to load the libwebp runtime library the ImageDecoder uses to decode
+// WebP. Returns true when it is available, mirroring the kernel's own runtime
+// gating so the test can assert full decoding only when the dependency is
+// present.
+bool LibWebpRuntimeAvailable() {
+#if defined(_WIN32)
+  for (const char *name : {"libwebp.dll", "webp.dll"}) {
+    HMODULE handle = LoadLibraryA(name);
+    if (handle != nullptr) {
+      FreeLibrary(handle);
+      return true;
+    }
+  }
+  return false;
+#else
+  for (const char *name : {"libwebp.so.7", "libwebp.so"}) {
     void *handle = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
     if (handle != nullptr) {
       dlclose(handle);
@@ -352,6 +388,60 @@ TEST_F(ImageDecoderTest, DecodeJpeg2000Rgb) {
     EXPECT_EQ(p[5], 0);
   } else {
     // Without the runtime library the kernel falls back to an empty matrix.
+    EXPECT_EQ(result.shape[0], 0);
+    EXPECT_EQ(result.shape[1], 0);
+  }
+}
+
+TEST_F(ImageDecoderTest, DecodeWebpRgb) {
+  KernelContext ctx(core::runtime::DefaultOpset(20));
+  ImageDecoder decoder(ctx);
+  Tensor encoded = MakeEncodedTensor(kWebpData, sizeof(kWebpData));
+  Tensor result = decoder(encoded, "RGB");
+
+  ASSERT_EQ(result.shape.size(), 3u);
+  EXPECT_EQ(result.shape[2], 3); // channels
+
+  if (LibWebpRuntimeAvailable()) {
+    // The kernel decodes WebP through libwebp when it is present.
+    EXPECT_EQ(result.shape[0], 1); // height
+    EXPECT_EQ(result.shape[1], 2); // width
+
+    const uint8_t *p = result.bytes();
+    // Pixel 0: Red
+    EXPECT_EQ(p[0], 255);
+    EXPECT_EQ(p[1], 0);
+    EXPECT_EQ(p[2], 0);
+    // Pixel 1: Green
+    EXPECT_EQ(p[3], 0);
+    EXPECT_EQ(p[4], 255);
+    EXPECT_EQ(p[5], 0);
+  } else {
+    // Without the runtime library the kernel falls back to an empty matrix.
+    EXPECT_EQ(result.shape[0], 0);
+    EXPECT_EQ(result.shape[1], 0);
+  }
+}
+
+TEST_F(ImageDecoderTest, DecodeWebpBgr) {
+  KernelContext ctx(core::runtime::DefaultOpset(20));
+  ImageDecoder decoder(ctx);
+  Tensor encoded = MakeEncodedTensor(kWebpData, sizeof(kWebpData));
+  Tensor result = decoder(encoded, "BGR");
+
+  ASSERT_EQ(result.shape.size(), 3u);
+  EXPECT_EQ(result.shape[2], 3); // channels
+
+  if (LibWebpRuntimeAvailable()) {
+    EXPECT_EQ(result.shape[0], 1); // height
+    EXPECT_EQ(result.shape[1], 2); // width
+
+    const uint8_t *p = result.bytes();
+    // Pixel 0 is Red in RGB => BGR = (0, 0, 255)
+    EXPECT_EQ(p[0], 0);
+    EXPECT_EQ(p[1], 0);
+    EXPECT_EQ(p[2], 255);
+  } else {
     EXPECT_EQ(result.shape[0], 0);
     EXPECT_EQ(result.shape[1], 0);
   }
