@@ -9,8 +9,8 @@ and run the model through onnx-light's :class:`ReferenceEvaluator`, feeding the
 encoded bytestream as a ``uint8`` input tensor and checking the decoded
 ``(H, W, C)`` output. They mirror the C++ ``unittests/cc/test_image_decoder.cc``
 cases (BMP, PNM, uncompressed TIFF and the compressed TIFF variants handled by
-this package) but exercise the full model-execution path rather than calling the
-kernel directly.
+this package, plus WebP decoded through ``libwebp``) but exercise the full
+model-execution path rather than calling the kernel directly.
 
 Running a model requires the onnx-light Python package; when it is not
 importable the whole module is skipped.
@@ -83,6 +83,12 @@ TIFF_DEFLATE_DATA = bytes.fromhex(
     "010000000100000017010400010000000e00000000000000080008000800"
     "78dafbcfc0c0f09f010007fe01ff"
 )
+
+
+# Minimal lossless WebP (VP8L) 2x1 image: Red, Green. Decoded through libwebp,
+# which is loaded dynamically at runtime; when it is unavailable the decoder
+# falls back to the empty (0, 0, C) matrix per the ONNX schema.
+WEBP_DATA = bytes.fromhex("5249464618000000574542505650384c0c0000002f0100000098fff98ffe8701")
 
 
 def _make_image_decoder_model(pixel_format: str):
@@ -169,6 +175,19 @@ class TestImageDecoderModel(unittest.TestCase):
         self.assertEqual(image.shape[2], 3)
         # Pixel 0 is Red in RGB => BGR = (0, 0, 255)
         np.testing.assert_array_equal(image[0, 0], [0, 0, 255])
+
+    def test_decode_webp_rgb(self):
+        image = self._decode(WEBP_DATA, "RGB")
+        self.assertEqual(image.shape[2], 3)
+        if image.shape[0] == 0:
+            # libwebp is unavailable: the decoder returns the empty matrix per
+            # the ONNX schema.
+            self.assertEqual(image.shape, (0, 0, 3))
+        else:
+            # Decoded through libwebp: 2x1 Red, Green.
+            self.assertEqual(image.shape, (1, 2, 3))
+            np.testing.assert_array_equal(image[0, 0], [255, 0, 0])  # Red
+            np.testing.assert_array_equal(image[0, 1], [0, 255, 0])  # Green
 
     def test_decode_unrecognized_falls_back_to_empty_matrix(self):
         garbage = bytes([0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04])
