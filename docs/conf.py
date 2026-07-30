@@ -27,3 +27,5 @@ sphinx_gallery_conf = {
 
 html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
+html_logo = "_static/logo.svg"
+html_favicon = "_static/logo.svg"
