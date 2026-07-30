@@ -7,6 +7,13 @@ image format supported by :mod:`PIL` (Pillow), and reloads each encoded
 bytestream with the ONNX ``ImageDecoder`` operator provided by
 ``onnx-light-kernel-images``.
 
+The kernels are registered with the onnx-light dispatch table
+(:func:`register_image_kernels`) and then exercised through a one-node
+``ImageDecoder`` ONNX model executed by onnx-light's
+:class:`~onnx_light.onnx.reference.ReferenceEvaluator`. The encoded file bytes
+are fed as a ``uint8`` input tensor and the decoded channel-last
+``(H, W, C)`` ``uint8`` image is read back from the output.
+
 For lossless formats (BMP, PNG, PNM/PPM, and TIFF — including the PackBits,
 LZW and Deflate compressions) the decoded pixels must match the original array
 exactly. For the remaining formats (JPEG, JPEG2000 and WebP) the example
@@ -17,33 +24,57 @@ libraries are not available on the machine the decoder returns an empty
 ``(0, 0, C)`` matrix (as described by the ONNX ``ImageDecoder`` schema) and the
 example simply notes it.
 
-The heavy lifting happens in a single call:
+The decoder is driven through a small ONNX model:
 
 .. code-block:: python
 
-    from onnx_light_kernel_images.onnx_py._imgpykernels import decode_image
-
-    pixels = decode_image(encoded_bytes, "RGB")  # -> (H, W, C) uint8 ndarray
+    node = helper.make_node("ImageDecoder", ["encoded"], ["image"], pixel_format="RGB")
+    ...
+    sess = ReferenceEvaluator(model)
+    (image,) = sess.run(None, {"encoded": np.frombuffer(encoded_bytes, np.uint8)})
 """
 
 # %%
 # Setup
 # -----
 #
-# Register the kernel once and build a deterministic test image with a few
-# fully-saturated colors so that lossless round-trips can be compared exactly.
+# Register the kernels once, build a one-node ``ImageDecoder`` model, and create
+# a deterministic test image with a few fully-saturated colors so that lossless
+# round-trips can be compared exactly.
 
 import io
 
 import numpy as np
 from PIL import Image
 
-from onnx_light_kernel_images.onnx_py._imgpykernels import (
-    decode_image,
-    register_image_kernels,
-)
+from onnx_light.onnx import TensorProto, helper
+from onnx_light.onnx.reference import ReferenceEvaluator
+
+from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels
 
 register_image_kernels()
+
+
+def make_image_decoder_model(pixel_format="RGB"):
+    """Builds a single-node ``ImageDecoder`` ONNX model for ``pixel_format``."""
+    node = helper.make_node("ImageDecoder", ["encoded"], ["image"], pixel_format=pixel_format)
+    graph = helper.make_graph(
+        [node],
+        "image_decoder",
+        [helper.make_tensor_value_info("encoded", TensorProto.UINT8, [None])],
+        [helper.make_tensor_value_info("image", TensorProto.UINT8, [None, None, None])],
+    )
+    return helper.make_model(graph, opset_imports=[helper.make_opsetid("", 20)])
+
+
+sess = ReferenceEvaluator(make_image_decoder_model("RGB"))
+
+
+def decode_image(encoded):
+    """Decodes ``encoded`` bytes through the ImageDecoder model."""
+    (image,) = sess.run(None, {"encoded": np.frombuffer(encoded, dtype=np.uint8)})
+    return image
+
 
 height, width = 8, 12
 original = np.zeros((height, width, 3), dtype=np.uint8)
@@ -57,8 +88,8 @@ original[-1, -1] = (255, 255, 255)
 pil_image = Image.fromarray(original, "RGB")
 
 # %%
-# Encode with PIL, decode with ONNX
-# ---------------------------------
+# Encode with PIL, decode with the ONNX model
+# -------------------------------------------
 #
 # Each entry pairs a Pillow ``save`` format (and optional keyword arguments)
 # with a flag telling whether the round-trip is expected to be lossless.
@@ -87,7 +118,7 @@ for name, save_kwargs, lossless in cases:
         continue
 
     encoded = buffer.getvalue()
-    decoded = decode_image(encoded, "RGB")
+    decoded = decode_image(encoded)
 
     if decoded.shape[0] == 0:
         # The optional runtime library (libopenjp2 / libwebp) is unavailable,
