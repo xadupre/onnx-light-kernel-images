@@ -33,5 +33,3 @@ flag_management:
       carryforward: true
     - name: python-Windows
       carryforward: true
-    - name: python-macOS
-      carryforward: true
