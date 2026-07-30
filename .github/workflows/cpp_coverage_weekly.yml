@@ -11,39 +11,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check_recent_commit:
+    name: check recent commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_run: ${{ steps.decide.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: decide
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "Trigger is ${{ github.event_name }}; running unconditionally."
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # On scheduled runs, only proceed when a commit was made on the
+          # default branch within the last week.
+          recent=$(git log -1 --since='7 days ago' --format=%H || true)
+          if [ -n "$recent" ]; then
+            echo "Recent commit found: $recent"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No commit in the last week; skipping coverage build."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   cpp-coverage:
     name: C++ coverage (ubuntu-latest)
+    needs: check_recent_commit
+    if: needs.check_recent_commit.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
-        with:
-          # Full history so the "commit in the past week" check can inspect
-          # commit dates rather than just the tip commit.
-          fetch-depth: 0
-
-      # Skip the (relatively expensive) coverage build on scheduled runs when
-      # no commit landed on the branch during the previous week. Manual
-      # workflow_dispatch runs always proceed.
-      - name: Check for commits in the past week
-        id: recent
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual run requested; proceeding."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$(git log --since='7 days ago' --format=%H)" ]; then
-            echo "Found commits in the past week; proceeding."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No commits in the past week; skipping coverage."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Set up Python
-        if: steps.recent.outputs.run == 'true'
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -52,7 +61,6 @@ jobs:
       # and libwebp shared libraries, loaded dynamically at runtime. Install
       # them so those decoders are exercised by the C++ tests.
       - name: Install runtime image codecs and gcovr
-        if: steps.recent.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libopenjp2-7 libwebp7
@@ -63,7 +71,6 @@ jobs:
       # disabled) so the coverage flags apply cleanly. A Debug/-O0 build keeps
       # the gcov line mapping accurate.
       - name: Configure with coverage
-        if: steps.recent.outputs.run == 'true'
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Debug \
@@ -73,15 +80,12 @@ jobs:
             -DONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE=ON
 
       - name: Build
-        if: steps.recent.outputs.run == 'true'
         run: cmake --build build --parallel
 
       - name: Run C++ unit tests
-        if: steps.recent.outputs.run == 'true'
         run: ctest --test-dir build --output-on-failure --timeout 240
 
       - name: Generate coverage report
-        if: steps.recent.outputs.run == 'true'
         run: |
           gcovr --root . \
             --filter 'onnx_light_kernel_images/' \
@@ -91,14 +95,12 @@ jobs:
             --print-summary
 
       - name: Upload coverage artifact
-        if: steps.recent.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cpp-coverage
           path: coverage.xml
 
       - name: Upload coverage to Codecov
-        if: steps.recent.outputs.run == 'true'
         uses: codecov/codecov-action@v5
         with:
           files: coverage.xml
