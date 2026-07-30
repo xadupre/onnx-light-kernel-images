@@ -1,5 +1,7 @@
 # onnx-light-kernel-images
 
+<img src="docs/_static/logo.svg" alt="onnx-light-kernel-images logo" width="116" height="80" align="right" />
+
 [![ci-core](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml)
 [![docs](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/docs.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/docs.yml)
 [![asan-ubsan](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml)
