@@ -1,0 +1,141 @@
+name: Build C++ Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag or ref to build (defaults to the branch the workflow is run from)."
+        required: false
+        type: string
+  push:
+    tags:
+      - "*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# onnx-light ships prebuilt C++ archives only for Linux and Windows, so the
+# release build targets those platforms. macOS has no released archive and its
+# CMake configure step fails rather than building onnx-light from source, so it
+# is intentionally omitted here.
+#
+# When triggered by a tag push (or a workflow_dispatch with a tag), each matrix
+# job attaches its archive to the matching GitHub Release (requires
+# contents: write). Other runs only upload the artifacts to Actions storage.
+jobs:
+  build_cpp_artifacts:
+    name: cpp (${{ matrix.artifact_suffix }})
+    runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Linux ──────────────────────────────────────────────────────────
+          - artifact_suffix: linux-x86_64
+            runs-on: ubuntu-24.04
+            archive_ext: tar.gz
+          - artifact_suffix: linux-aarch64
+            runs-on: ubuntu-24.04-arm
+            archive_ext: tar.gz
+          # ── Windows ────────────────────────────────────────────────────────
+          - artifact_suffix: windows-AMD64
+            runs-on: windows-latest
+            archive_ext: zip
+          - artifact_suffix: windows-ARM64
+            runs-on: windows-11-arm
+            archive_ext: zip
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Detect CPU count
+        id: cpu_count
+        shell: bash
+        run: |
+          count=$(python3 -c 'import os; print(os.cpu_count() or 1)')
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          echo "CPU count: ${count}"
+
+      # ── Configure ──────────────────────────────────────────────────────────
+      - name: Configure CMake (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cmake -S . -B build/cpp \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON=OFF \
+            -DONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=OFF \
+            -DONNX_HARDENING=ON \
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dist/onnx-light-kernel-images-cpp"
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build/cpp `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON=OFF `
+            -DONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=OFF `
+            -DONNX_HARDENING=ON `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/dist/onnx-light-kernel-images-cpp"
+
+      # ── Build & install ────────────────────────────────────────────────────
+      - name: Build
+        shell: bash
+        run: |
+          cmake --build build/cpp --config Release --parallel ${{ steps.cpu_count.outputs.count }}
+
+      - name: Install
+        shell: bash
+        run: |
+          cmake --install build/cpp --config Release
+
+      # ── Archive ────────────────────────────────────────────────────────────
+      - name: Archive (Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd "${{ github.workspace }}/dist"
+          tar -czf "onnx-light-kernel-images-cpp-${{ matrix.artifact_suffix }}.tar.gz" onnx-light-kernel-images-cpp/
+          echo "Created dist/onnx-light-kernel-images-cpp-${{ matrix.artifact_suffix }}.tar.gz"
+
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $src  = "${{ github.workspace }}\dist\onnx-light-kernel-images-cpp"
+          $dest = "${{ github.workspace }}\dist\onnx-light-kernel-images-cpp-${{ matrix.artifact_suffix }}.zip"
+          Compress-Archive -Path $src -DestinationPath $dest
+          Write-Host "Created $dest"
+
+      # ── Upload ─────────────────────────────────────────────────────────────
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cpp-${{ matrix.artifact_suffix }}
+          path: ${{ github.workspace }}/dist/onnx-light-kernel-images-cpp-${{ matrix.artifact_suffix }}.${{ matrix.archive_ext }}
+
+      - name: Attach to GitHub Release
+        if: github.ref_type == 'tag' || inputs.tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${INPUT_TAG}"
+          if [ -z "${tag}" ]; then
+            tag="${GITHUB_REF_NAME}"
+          fi
+          tag="${tag#refs/tags/}"
+          if ! gh release view "${tag}" >/dev/null 2>&1; then
+            gh release create "${tag}" --verify-tag --title "${tag}" --notes "" >/dev/null 2>&1 || \
+              gh release view "${tag}" >/dev/null 2>&1
+          fi
+          gh release upload "${tag}" \
+            "${{ github.workspace }}/dist/onnx-light-kernel-images-cpp-${{ matrix.artifact_suffix }}.${{ matrix.archive_ext }}" \
+            --clobber
