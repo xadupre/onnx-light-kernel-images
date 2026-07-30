@@ -57,8 +57,8 @@ public:
         std::vector<uint8_t> rewritten;
         if (RewriteCompressedTiff(input.bytes(), input.size_bytes(), rewritten)) {
           RawBufferAllocator *allocator = rt.allocator();
-          Tensor decoded = MakeOutputTensor(
-              data_type, {static_cast<int64_t>(rewritten.size())}, rewritten.size(), allocator);
+          Tensor decoded = MakeOutputTensor(data_type, {static_cast<int64_t>(rewritten.size())},
+                                            rewritten.size(), allocator);
           if (!rewritten.empty()) {
             std::memcpy(decoded.mutable_bytes(), rewritten.data(), rewritten.size());
           }

@@ -5,8 +5,12 @@
 #include "onnx_light_kernel_images/register_image_kernels.h"
 #include "onnx_light_kernel_images/tiff_compression.h"
 
+#include "onnx.h"
+#include "onnx_core/compute/raw_buffer_allocator.h"
 #include "onnx_core/runtime/kernel_context.h"
 #include "onnx_core/runtime/kernel_dispatch_table.h"
+#include "onnx_core/runtime/run_nodes.h"
+#include "onnx_core/runtime/runtime_context.h"
 #include "onnx_core/runtime/simple_tensor.h"
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
 
@@ -585,4 +589,40 @@ TEST_F(ImageDecoderTest, RewriteCompressedTiffRejectsUncompressed) {
   // Non-TIFF inputs (BMP) are rejected too.
   EXPECT_FALSE(
       onnx_light_kernel_images::RewriteCompressedTiff(kBmpData, sizeof(kBmpData), rewritten));
+}
+
+// ---------------------------------------------------------------------------
+// End-to-end run of the registered ``TiffAwareImageDecoder`` kernel through
+// ``RunNode`` with a runtime allocator attached to the ``RuntimeContext``.
+//
+// This exercises the ``TiffAwareImageDecoder::Run`` path (the compressed-TIFF
+// rewrite injected before the base decoder), which acquires its rewritten
+// byte-stream tensor from ``rt.allocator()`` via ``MakeOutputTensor`` instead
+// of an inline ``std::vector``. The decoded output must still be correct and,
+// because an allocator is attached, allocator-backed.
+// ---------------------------------------------------------------------------
+TEST_F(ImageDecoderTest, RunNodeDecodesCompressedTiffThroughAllocator) {
+  core::runtime::SimpleRawBufferAllocator pool(16);
+  core::runtime::RuntimeContext rt(KernelContext(core::runtime::DefaultOpset(20)),
+                                   core::runtime::RuntimeContextOptions{.allocator = &pool});
+
+  rt.tensors()["encoded"] = MakeEncodedTensor(kTiffPackBitsData, sizeof(kTiffPackBitsData));
+
+  NodeProto node;
+  node.set_op_type("ImageDecoder");
+  node.add_input("encoded");
+  node.add_output("image");
+  AttributeProto *pixel_format = node.add_attribute();
+  pixel_format->set_name("pixel_format");
+  pixel_format->set_type(AttributeProto::AttributeType::STRING);
+  pixel_format->set_s("RGB");
+
+  core::runtime::RunNode(node, rt);
+
+  ASSERT_NE(rt.tensors().find("image"), rt.tensors().end());
+  const Tensor &result = rt.tensors()["image"];
+  ExpectRedGreenRgb(result);
+  // With an allocator attached, the decoded output is acquired from the pool.
+  EXPECT_TRUE(result.has_allocation());
+  EXPECT_GT(pool.PeakAllocatedSize(), 0u);
 }
