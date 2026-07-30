@@ -15,6 +15,11 @@ jobs:
     name: core (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.os == 'windows-latest' && 32 || 25 }}
+    # onnx-light ships no prebuilt C++ archive for macOS and building it from
+    # source is out of scope, so the macOS leg fails at CMake configure time.
+    # Keep it running for visibility but mark it non-blocking so the failure
+    # does not turn the overall ci-core check red.
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     permissions:
       contents: read
     strategy:
@@ -23,7 +28,7 @@ jobs:
         # onnx-light ships prebuilt C++ archives only for Linux and Windows, so
         # those platforms download the archive from the GitHub release. macOS
         # has no released archive, so its build simply fails rather than
-        # compiling onnx-light from source.
+        # compiling onnx-light from source (see continue-on-error above).
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         python-version: ["3.13"]
     steps:
