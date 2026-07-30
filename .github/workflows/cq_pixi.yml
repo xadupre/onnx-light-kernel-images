@@ -1,4 +1,4 @@
-name: pixi-weekly
+name: acq - pixi
 
 on:
   workflow_dispatch:
