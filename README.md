@@ -1,6 +1,7 @@
 # onnx-light-kernel-images
 
 [![ci-core](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml)
+[![asan-ubsan](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml)
 [![codecov](https://codecov.io/gh/xadupre/onnx-light-kernel-images/branch/main/graph/badge.svg)](https://codecov.io/gh/xadupre/onnx-light-kernel-images)
 [![Style](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml)
 
@@ -68,6 +69,11 @@ ctest --test-dir build
 
 The build automatically downloads the onnx-light 0.1.9 C++ release archive.
 To use a custom install, set `-DONNX_LIGHT_ROOT=/path/to/onnx-light-cpp`.
+
+> **macOS:** onnx-light publishes prebuilt C++ archives only for Linux and
+> Windows. On macOS, build and install the onnx-light C++ SDK from source
+> (`-DONNX_LIGHT_BUILD_PYTHON=OFF`) and point the build at it with
+> `-DONNX_LIGHT_ROOT=/path/to/onnx-light-install`.
 
 ## C++ usage
 

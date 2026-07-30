@@ -14,15 +14,19 @@ jobs:
   core_tests:
     name: core (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 32 || 25 }}
+    # macOS gets extra time because onnx-light ships no prebuilt C++ archive for
+    # it, so the SDK is compiled from source before the kernel is built.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 32 || (matrix.os == 'macos-latest' && 45 || 25) }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        # onnx-light only ships prebuilt C++ archives for Linux and Windows,
-        # so the ImageDecoder kernel is built and tested on those platforms.
-        os: ["ubuntu-latest", "windows-latest"]
+        # onnx-light ships prebuilt C++ archives only for Linux and Windows, so
+        # those platforms download the archive. macOS has no archive, so the
+        # onnx-light C++ SDK is built from source and pointed at via
+        # ONNX_LIGHT_ROOT before the ImageDecoder kernel is built and tested.
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v7
@@ -34,6 +38,70 @@ jobs:
 
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Install OpenSSL and OpenMP (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install openssl@3 libomp || true
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          # onnx-light's installed CMake config calls find_dependency(OpenMP),
+          # which is REQUIRED for every consumer. Apple Clang ships no OpenMP,
+          # so expose Homebrew's keg-only libomp through the FindOpenMP cache
+          # hints. These are consumed by the onnx-light SDK build below (via
+          # eval $CMAKE_ARGS) and by the kernel build (scikit-build-core reads
+          # CMAKE_ARGS from the environment).
+          libomp="$(brew --prefix libomp)"
+          echo "CMAKE_ARGS=-DOpenMP_ROOT=${libomp} -DOpenMP_C_FLAGS=\"-Xpreprocessor -fopenmp -I${libomp}/include\" -DOpenMP_C_LIB_NAMES=omp -DOpenMP_CXX_FLAGS=\"-Xpreprocessor -fopenmp -I${libomp}/include\" -DOpenMP_CXX_LIB_NAMES=omp -DOpenMP_omp_LIBRARY=${libomp}/lib/libomp.dylib" >> "$GITHUB_ENV"
+
+      # onnx-light publishes no prebuilt C++ archive for macOS, so build and
+      # install the 0.1.9 SDK from source and expose it through ONNX_LIGHT_ROOT
+      # (the kernel's CMakeLists skips the archive download when it is set).
+      - name: Checkout onnx-light source (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/checkout@v7
+        with:
+          repository: xadupre/onnx-light
+          ref: "0.1.9"
+          path: onnx-light-src
+
+      - name: Build and install onnx-light C++ SDK (macOS)
+        if: runner.os == 'macOS'
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+        run: |
+          # eval so the quoted OpenMP flags inside CMAKE_ARGS are re-parsed as
+          # single CMake arguments rather than split on their embedded spaces.
+          eval cmake -S onnx-light-src -B onnx-light-build \
+            ${CMAKE_ARGS} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DONNX_LIGHT_BUILD_PYTHON=OFF \
+            -DONNX_LIGHT_BUILD_TESTS=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/onnx-light-install"
+          cmake --build onnx-light-build --config Release
+          cmake --install onnx-light-build --config Release
+          # onnx-light's install ships include/onnx_light/onnx_proto/ as a
+          # byte-identical mirror of the headers in include/onnx_light/, each
+          # guarded only by `#pragma once`. A single translation unit can pull
+          # in both physical copies (e.g. via onnx.h and an onnx_proto/ header)
+          # and fail with "redefinition". The kernel's CMakeLists collapses this
+          # mirror only when it downloads the archive itself; that patch is
+          # skipped for a user-supplied ONNX_LIGHT_ROOT, so replicate it here on
+          # the install tree we build. Only truly-identical duplicates are
+          # rewritten into a forwarding include, keeping this safe/idempotent.
+          proto_dir="${{ github.workspace }}/onnx-light-install/include/onnx_light/onnx_proto"
+          if [ -d "${proto_dir}" ]; then
+            for hdr in "${proto_dir}"/*.h "${proto_dir}"/*.hpp; do
+              [ -e "${hdr}" ] || continue
+              name="$(basename "${hdr}")"
+              parent="${{ github.workspace }}/onnx-light-install/include/onnx_light/${name}"
+              if [ -f "${parent}" ] && cmp -s "${hdr}" "${parent}"; then
+                printf '#pragma once\n#include "../%s"\n' "${name}" > "${hdr}"
+              fi
+            done
+          fi
+          echo "ONNX_LIGHT_ROOT=${{ github.workspace }}/onnx-light-install" >> "$GITHUB_ENV"
 
       - name: Set parallel build level
         shell: bash
@@ -71,6 +139,12 @@ jobs:
           CMAKE_GENERATOR: Ninja
           SCCACHE_GHA_ENABLED: "true"
         run: pip install -C build-dir=build -C cmake.build-type=Release -C cmake.define.ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON -C cmake.define.CMAKE_C_COMPILER_LAUNCHER=sccache -C cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=sccache -e .[dev] -v
+
+      - name: Build and install package (macOS)
+        if: runner.os == 'macOS'
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+        run: pip install -C build-dir=build -C cmake.build-type=Release -C cmake.define.ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON -C cmake.define.ONNX_LIGHT_ROOT="${ONNX_LIGHT_ROOT}" -C cmake.define.CMAKE_C_COMPILER_LAUNCHER=sccache -C cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=sccache -e .[dev] -v
 
       - name: pip freeze
         run: pip freeze
