@@ -1,0 +1,37 @@
+# Codecov configuration.
+#
+# Coverage is uploaded to Codecov from two independent workflows:
+#   * ci-core (.github/workflows/ci_core.yml) runs on every push / pull request
+#     and uploads the Python test coverage under the "python-<os>" flags.
+#   * cpp-coverage-weekly (.github/workflows/cpp_coverage_weekly.yml) runs on a
+#     weekly schedule and uploads the C++ test coverage under the "cpp" flag.
+#
+# Because these reports are produced by different workflows on different
+# schedules, most commits only upload one of them. "carryforward" tells Codecov
+# to reuse the most recent report for a flag when a commit does not upload it,
+# so the combined project coverage (and the README badge) reflects both the
+# Python and C++ reports at all times.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: auto
+        threshold: 1%
+
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: cpp
+      carryforward: true
+    - name: python-Linux
+      carryforward: true
+    - name: python-Windows
+      carryforward: true
+    - name: python-macOS
+      carryforward: true
