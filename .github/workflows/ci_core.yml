@@ -22,9 +22,9 @@ jobs:
       matrix:
         # onnx-light ships prebuilt C++ archives only for Linux and Windows, so
         # those platforms download the archive from the GitHub release. macOS
-        # has no released archive and building onnx-light from source is out of
-        # scope, so it is excluded from the matrix.
-        os: ["ubuntu-latest", "windows-latest"]
+        # has no released archive, so its build simply fails rather than
+        # compiling onnx-light from source.
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v7
@@ -71,6 +71,15 @@ jobs:
         if: runner.os == 'Windows'
         env:
           CMAKE_GENERATOR: Ninja
+          SCCACHE_GHA_ENABLED: "true"
+        run: pip install -C build-dir=build -C cmake.build-type=Release -C cmake.define.ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON -C cmake.define.CMAKE_C_COMPILER_LAUNCHER=sccache -C cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=sccache -e .[dev] -v
+
+      # macOS has no released onnx-light C++ archive, so this configure step
+      # fails with the CMake "No prebuilt onnx-light C++ archive" error rather
+      # than falling back to building onnx-light from source.
+      - name: Build and install package (macOS)
+        if: runner.os == 'macOS'
+        env:
           SCCACHE_GHA_ENABLED: "true"
         run: pip install -C build-dir=build -C cmake.build-type=Release -C cmake.define.ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON -C cmake.define.CMAKE_C_COMPILER_LAUNCHER=sccache -C cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=sccache -e .[dev] -v
 
