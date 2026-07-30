@@ -4,6 +4,7 @@
 [![asan-ubsan](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml)
 [![codecov](https://codecov.io/gh/xadupre/onnx-light-kernel-images/branch/main/graph/badge.svg)](https://codecov.io/gh/xadupre/onnx-light-kernel-images)
 [![Style](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/xadupre/onnx-light-kernel-images/badge)](https://securityscorecards.dev/viewer/?uri=github.com/xadupre/onnx-light-kernel-images)
 
 ImageDecoder kernel extension for
 [onnx-light](https://github.com/xadupre/onnx-light).
