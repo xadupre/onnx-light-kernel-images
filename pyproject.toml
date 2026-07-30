@@ -18,6 +18,8 @@ dependencies = [
 dev = [
     "pytest>=7",
     "pytest-cov",
+    "pillow",
+    "matplotlib",
 ]
 docs = [
     "pydata-sphinx-theme",
