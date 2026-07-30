@@ -1,0 +1,74 @@
+name: docs
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: build docs
+    runs-on: ubuntu-latest
+    # The onnx-light Python runtime is compiled from source (see below), so the
+    # job needs more time than a plain Sphinx build; sccache keeps repeat runs
+    # that do not touch C++ near-instant.
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Set parallel build level
+        shell: bash
+        run: |
+          CMAKE_BUILD_PARALLEL_LEVEL=$(python -c 'import os; print(os.cpu_count() or 1)')
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}" >> "$GITHUB_ENV"
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}"
+
+      # The documentation gallery decodes JPEG2000 and WebP through the OpenJPEG
+      # and libwebp shared libraries loaded at runtime; install them so the
+      # example exercises those decoders instead of reporting them unavailable.
+      - name: Install runtime image codecs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libopenjp2-7 libwebp7
+
+      # Sphinx-Gallery executes examples/plot_image_formats.py at build time,
+      # which runs an ImageDecoder model through onnx-light's ReferenceEvaluator.
+      # That requires the *full* onnx-light Python runtime; the wheels published
+      # in the 0.1.9 release are reduced builds (ONNX_LIGHT_BUILD_KERNELS=OFF)
+      # without the operator-kernel runtime, so build and install onnx-light
+      # 0.1.9 from source to match the C++ archive the kernel links against.
+      - name: Build and install onnx-light Python (full runtime)
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+          CMAKE_ARGS: "-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+        run: pip install "onnx-light @ git+https://github.com/xadupre/onnx-light@0.1.9" -v
+
+      # Build the ImageDecoder kernel (downloads the prebuilt onnx-light 0.1.9
+      # C++ archive) and install the documentation dependencies.
+      - name: Build and install package with docs extras
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+        run: pip install -C build-dir=build -C cmake.build-type=Release -C cmake.define.CMAKE_C_COMPILER_LAUNCHER=sccache -C cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=sccache -e .[docs] -v
+
+      - name: pip freeze
+        run: pip freeze
+
+      # sphinx-build exits non-zero when Sphinx-Gallery fails to execute an
+      # example, so this step fails if the documentation stops running.
+      - name: Build documentation
+        run: sphinx-build -b html docs dist/html
