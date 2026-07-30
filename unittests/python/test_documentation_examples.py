@@ -1,10 +1,10 @@
 # Copyright (c) ONNX Project Contributors
 #
 # SPDX-License-Identifier: Apache-2.0
-"""Runs every gallery example under ``examples/`` as a unit test.
+"""Runs every gallery example under ``docs/examples/`` as a unit test.
 
-Each ``examples/plot_*.py`` file is executed in a subprocess and the test fails
-if the example raises an exception. The examples build a one-node
+Each ``docs/examples/plot_*.py`` file is executed in a subprocess and the test
+fails if the example raises an exception. The examples build a one-node
 ``ImageDecoder`` ONNX model, register this package's image kernels with the
 onnx-light dispatch table and run the model through onnx-light's
 :class:`ReferenceEvaluator`, so they require the onnx-light Python package (with
@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_EXAMPLES_DIR = _REPO_ROOT / "examples"
+_EXAMPLES_DIR = _REPO_ROOT / "docs" / "examples"
 
 
 def _missing_dependency() -> str | None:

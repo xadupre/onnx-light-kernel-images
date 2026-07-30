@@ -46,8 +46,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libopenjp2-7 libwebp7
 
-      # Sphinx-Gallery executes examples/plot_image_formats.py at build time,
-      # which runs an ImageDecoder model through onnx-light's ReferenceEvaluator.
+      # Sphinx-Gallery executes docs/examples/plot_image_formats.py at build
+      # time, which runs an ImageDecoder model through onnx-light's
+      # ReferenceEvaluator.
       # That requires the *full* onnx-light Python runtime; the wheels published
       # in the 0.1.9 release are reduced builds (ONNX_LIGHT_BUILD_KERNELS=OFF)
       # without the operator-kernel runtime, so build and install onnx-light
