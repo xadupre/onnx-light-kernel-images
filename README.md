@@ -2,6 +2,7 @@
 
 [![ci-core](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml)
 [![asan-ubsan](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml)
+[![hardening](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_hardening.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_hardening.yml)
 [![codecov](https://codecov.io/gh/xadupre/onnx-light-kernel-images/branch/main/graph/badge.svg)](https://codecov.io/gh/xadupre/onnx-light-kernel-images)
 [![Style](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/xadupre/onnx-light-kernel-images/badge)](https://securityscorecards.dev/viewer/?uri=github.com/xadupre/onnx-light-kernel-images)
@@ -70,6 +71,17 @@ ctest --test-dir build
 
 The build automatically downloads the onnx-light 0.1.9 C++ release archive.
 To use a custom install, set `-DONNX_LIGHT_ROOT=/path/to/onnx-light-cpp`.
+
+### Compiler hardening
+
+Pass `-DONNX_HARDENING=ON` to build every C++ target with the
+[OpenSSF Compiler Options Hardening Guide for C and C++](https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html)
+flags (for example `-D_FORTIFY_SOURCE`, `-fstack-protector-strong`,
+`-fstack-clash-protection`, `-fcf-protection`, RELRO/`now` linking on
+GCC/Clang and `/GS`, `/guard:cf`, `/Qspectre`, `/DYNAMICBASE` on MSVC). Each
+flag is probed and silently skipped when the active toolchain does not support
+it. With a pip build the option is forwarded via
+`-C cmake.define.ONNX_HARDENING=ON`.
 
 > **macOS:** onnx-light publishes prebuilt C++ archives only for Linux and
 > Windows. On macOS, build and install the onnx-light C++ SDK from source
