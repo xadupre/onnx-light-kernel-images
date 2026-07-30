@@ -18,6 +18,12 @@ option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON "Build Python extension." ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_INSTALL "Install the C++ library and headers." ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE
        "Instrument the C++ targets for code coverage (GCC/Clang only)." OFF)
+option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS
+       "Build libFuzzer-instrumented C++ fuzz harnesses (fuzz/fuzz_*.cc). Requires Clang and adds -fsanitize=fuzzer,address."
+       OFF)
+set(ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS "address"
+    CACHE STRING
+    "Comma-separated sanitizer list for fuzz harnesses (in addition to 'fuzzer').")
 option(ONNX_HARDENING
     "Enable OpenSSF Compiler Hardening Guide flags for C/C++ targets. \
 See cmake/Hardening.cmake and \
@@ -176,6 +182,18 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE)
   target_link_options(lib_onnx_light_kernel_images PUBLIC --coverage)
 endif()
 
+# When building the fuzz harnesses, instrument this repository's own kernel
+# sources (in particular the TIFF-compression rewriter) with libFuzzer edge
+# coverage and the requested sanitizers so the fuzzer actually explores the
+# custom decode path. ``fuzzer-no-link`` adds coverage without pulling in the
+# libFuzzer main, which lives in the harness executables instead. The onnx-light
+# SDK itself is consumed as a prebuilt archive and therefore cannot be
+# instrumented here.
+if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS)
+  target_compile_options(lib_onnx_light_kernel_images PUBLIC
+      "-fsanitize=fuzzer-no-link,${ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS}")
+endif()
+
 # ---------------------------------------------------------------------------
 # Python extension: _imgpykernels
 # ---------------------------------------------------------------------------
@@ -290,6 +308,56 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
 
   include(GoogleTest)
   gtest_discover_tests(test_image_decoder)
+endif()
+
+# ---------------------------------------------------------------------------
+# libFuzzer harnesses (fuzz/fuzz_*.cc)
+#
+# Each fuzz/fuzz_<name>.cc file exposes the standard libFuzzer entry point
+# ``LLVMFuzzerTestOneInput``. The companion fuzz/make_seed_corpus.cc is built
+# as a plain executable (no fuzzer instrumentation) and emits seed inputs for
+# OSS-Fuzz / local libFuzzer runs.
+#
+# Requires Clang because libFuzzer (-fsanitize=fuzzer,...) ships with Clang.
+# ``-fsanitize=fuzzer,address`` is the standard OSS-Fuzz instrumentation; set
+# ``ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS`` to override the sanitizer list
+# (the ``fuzzer`` sanitizer is always added automatically).
+# ---------------------------------------------------------------------------
+if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR
+        "ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS=ON requires Clang "
+        "(CMAKE_CXX_COMPILER_ID is '${CMAKE_CXX_COMPILER_ID}'). "
+        "Re-run cmake with CC=clang CXX=clang++.")
+  endif()
+
+  file(GLOB _img_fuzz_sources CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/fuzz/fuzz_*.cc")
+
+  foreach(_img_fuzz_source IN LISTS _img_fuzz_sources)
+    get_filename_component(_img_fuzz_target "${_img_fuzz_source}" NAME_WE)
+    add_executable(${_img_fuzz_target} "${_img_fuzz_source}")
+    target_include_directories(${_img_fuzz_target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(${_img_fuzz_target} PRIVATE
+        lib_onnx_light_kernel_images
+        onnx_light::lib_onnx_kernels
+        onnx_light::lib_onnx_core
+        onnx_light::lib_onnx_proto)
+    target_compile_options(${_img_fuzz_target} PRIVATE
+        "-fsanitize=fuzzer-no-link,${ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS}")
+    target_link_options(${_img_fuzz_target} PRIVATE
+        "-fsanitize=fuzzer,${ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS}")
+    set_property(TARGET ${_img_fuzz_target} PROPERTY FOLDER "Fuzzers")
+  endforeach()
+
+  # Seed-corpus generator: a plain (non-fuzzer-instrumented) executable that
+  # writes valid sample images into the requested directories so OSS-Fuzz /
+  # libFuzzer can use them as starting inputs.
+  add_executable(make_seed_corpus
+      "${CMAKE_CURRENT_SOURCE_DIR}/fuzz/make_seed_corpus.cc")
+  target_compile_features(make_seed_corpus PRIVATE cxx_std_20)
+  set_property(TARGET make_seed_corpus PROPERTY FOLDER "Fuzzers")
 endif()
 
 # ---------------------------------------------------------------------------

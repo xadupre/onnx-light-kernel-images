@@ -2,6 +2,7 @@
 
 [![ci-core](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/ci_core.yml)
 [![asan-ubsan](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_asan_ubsan.yml)
+[![fuzz](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_fuzz.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_fuzz.yml)
 [![hardening](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_hardening.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/cq_hardening.yml)
 [![codecov](https://codecov.io/gh/xadupre/onnx-light-kernel-images/branch/main/graph/badge.svg)](https://codecov.io/gh/xadupre/onnx-light-kernel-images)
 [![Style](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml/badge.svg)](https://github.com/xadupre/onnx-light-kernel-images/actions/workflows/style.yml)
@@ -142,6 +143,24 @@ ctest --test-dir build --output-on-failure
 pip install -e .
 pytest unittests/python/
 ```
+
+### Fuzzing
+
+libFuzzer harnesses under [`fuzz/`](fuzz/) exercise the image decoders and the
+custom TIFF-compression front-end with random / malformed inputs. They require
+Clang:
+
+```bash
+CC=clang CXX=clang++ cmake -S . -B build-fuzz -G Ninja \
+      -DONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS=ON \
+      -DONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON=OFF \
+      -DONNX_LIGHT_KERNEL_IMAGES_INSTALL=OFF
+cmake --build build-fuzz
+./build-fuzz/fuzz_image_decoder -runs=4000
+./build-fuzz/fuzz_tiff_compression -runs=4000
+```
+
+See [`fuzz/README.md`](fuzz/README.md) for details.
 
 ## License
 
