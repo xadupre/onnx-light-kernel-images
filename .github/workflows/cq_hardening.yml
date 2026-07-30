@@ -71,9 +71,12 @@ jobs:
         with:
           python-version: "3.13"
 
+      # Clang needs libomp-dev to satisfy onnx-light's find_dependency(OpenMP);
+      # unlike GCC (which bundles libgomp), Clang has no OpenMP runtime by
+      # default, so configuring onnx-light fails with "Could NOT find OpenMP_CXX".
       - name: Install clang (Linux)
         if: matrix.compiler == 'clang'
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: sudo apt-get update && sudo apt-get install -y clang libomp-dev
 
       # The ImageDecoder kernel decodes JPEG2000 and WebP through the OpenJPEG
       # and libwebp shared libraries, loaded dynamically at runtime. Install
