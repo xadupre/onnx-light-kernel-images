@@ -14,6 +14,10 @@ jobs:
   core_tests:
     name: core (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
+    # macOS has no released onnx-light C++ archive, so its build is expected to
+    # fail. Allow that job to fail without turning the whole workflow (and its
+    # README badge) red, while Linux and Windows remain required.
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     timeout-minutes: ${{ matrix.os == 'windows-latest' && 32 || 25 }}
     permissions:
       contents: read
