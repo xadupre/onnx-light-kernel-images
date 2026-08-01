@@ -258,6 +258,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_INSTALL)
   install(FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/register_image_kernels.h"
       "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/tiff_compression.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/parallel_for.h"
       DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/onnx_light_kernel_images")
 
   include(CMakePackageConfigHelpers)
@@ -308,6 +309,16 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
 
   include(GoogleTest)
   gtest_discover_tests(test_image_decoder)
+
+  add_executable(test_parallel_for
+      "${CMAKE_CURRENT_SOURCE_DIR}/unittests/cc/test_parallel_for.cc")
+  target_link_libraries(test_parallel_for PRIVATE GTest::gtest_main)
+  target_include_directories(test_parallel_for PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}")
+  target_compile_features(test_parallel_for PRIVATE cxx_std_20)
+  find_package(Threads REQUIRED)
+  target_link_libraries(test_parallel_for PRIVATE Threads::Threads)
+  gtest_discover_tests(test_parallel_for)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -371,6 +382,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
 endif()
 if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
   list(APPEND _onnx_light_kernel_images_hardening_targets test_image_decoder)
+  list(APPEND _onnx_light_kernel_images_hardening_targets test_parallel_for)
 endif()
 foreach(_t IN LISTS _onnx_light_kernel_images_hardening_targets)
   if(TARGET ${_t})
