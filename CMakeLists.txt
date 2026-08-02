@@ -175,6 +175,12 @@ target_link_libraries(lib_onnx_light_kernel_images PUBLIC
     onnx_light::lib_onnx_proto
 )
 
+# parallel_for.h (used by the TIFF predictor undo) relies on std::thread, so the
+# kernel library needs the platform threading library. PUBLIC so consumers that
+# include the header link it too.
+find_package(Threads REQUIRED)
+target_link_libraries(lib_onnx_light_kernel_images PUBLIC Threads::Threads)
+
 # Coverage instrumentation is applied PUBLIC so it propagates to the C++ test
 # executable that links this library, letting gcov emit .gcno/.gcda data for
 # both the kernel sources and the tests exercising them.

@@ -4,6 +4,9 @@
 
 #include "onnx_light_kernel_images/tiff_compression.h"
 
+#include "onnx_light_kernel_images/parallel_for.h"
+
+#include <algorithm>
 #include <array>
 #include <cstring>
 
@@ -534,13 +537,27 @@ void UndoHorizontalPredictor(std::vector<uint8_t> &data, uint32_t width, uint32_
   size_t row_bytes = static_cast<size_t>(width) * samples_per_pixel;
   if (row_bytes == 0)
     return;
-  for (uint32_t r = 0; r < rows; ++r) {
-    size_t base = static_cast<size_t>(r) * row_bytes;
-    if (base + row_bytes > data.size())
-      break;
-    for (size_t b = samples_per_pixel; b < row_bytes; ++b)
-      data[base + b] = static_cast<uint8_t>(data[base + b] + data[base + b - samples_per_pixel]);
-  }
+  // Rows are laid out contiguously, so only the leading prefix of rows that fit
+  // entirely inside the buffer is processed (matching the original bounds-guard
+  // that stopped at the first out-of-range row).
+  size_t max_rows = data.size() / row_bytes;
+  int64_t valid_rows = static_cast<int64_t>(std::min<size_t>(rows, max_rows));
+  if (valid_rows <= 0)
+    return;
+  // Each row's horizontal differencing is self-contained (it only reads earlier
+  // bytes of the same row), so distinct rows can be undone concurrently on
+  // disjoint byte ranges. The per-row cost is roughly proportional to the bytes
+  // touched; ~1 ns/byte is a conservative estimate for this memory-bound,
+  // serially-dependent add, and ParallelFor keeps small images single-threaded.
+  ParallelFor(valid_rows, static_cast<double>(row_bytes),
+              [&data, row_bytes, samples_per_pixel](int64_t begin, int64_t end) {
+                for (int64_t r = begin; r < end; ++r) {
+                  size_t base = static_cast<size_t>(r) * row_bytes;
+                  for (size_t b = samples_per_pixel; b < row_bytes; ++b)
+                    data[base + b] =
+                        static_cast<uint8_t>(data[base + b] + data[base + b - samples_per_pixel]);
+                }
+              });
 }
 
 } // namespace
