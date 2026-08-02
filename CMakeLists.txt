@@ -21,6 +21,8 @@ option(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS
        "Build libFuzzer-instrumented C++ fuzz harnesses (fuzz/fuzz_*.cc). Requires Clang and adds -fsanitize=fuzzer,address."
        OFF)
+option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_BENCHMARKS
+       "Build C++ micro-benchmarks (benchmarks/bench_*.cc)." OFF)
 set(ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS "address"
     CACHE STRING
     "Comma-separated sanitizer list for fuzz harnesses (in addition to 'fuzzer').")
@@ -173,6 +175,12 @@ target_link_libraries(lib_onnx_light_kernel_images PUBLIC
     onnx_light::lib_onnx_proto
 )
 
+# parallel_for.h (used by the TIFF predictor undo) relies on std::thread, so the
+# kernel library needs the platform threading library. PUBLIC so consumers that
+# include the header link it too.
+find_package(Threads REQUIRED)
+target_link_libraries(lib_onnx_light_kernel_images PUBLIC Threads::Threads)
+
 # Coverage instrumentation is applied PUBLIC so it propagates to the C++ test
 # executable that links this library, letting gcov emit .gcno/.gcda data for
 # both the kernel sources and the tests exercising them.
@@ -258,6 +266,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_INSTALL)
   install(FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/register_image_kernels.h"
       "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/tiff_compression.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/parallel_for.h"
       DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/onnx_light_kernel_images")
 
   include(CMakePackageConfigHelpers)
@@ -308,6 +317,16 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
 
   include(GoogleTest)
   gtest_discover_tests(test_image_decoder)
+
+  add_executable(test_parallel_for
+      "${CMAKE_CURRENT_SOURCE_DIR}/unittests/cc/test_parallel_for.cc")
+  target_link_libraries(test_parallel_for PRIVATE GTest::gtest_main)
+  target_include_directories(test_parallel_for PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}")
+  target_compile_features(test_parallel_for PRIVATE cxx_std_20)
+  find_package(Threads REQUIRED)
+  target_link_libraries(test_parallel_for PRIVATE Threads::Threads)
+  gtest_discover_tests(test_parallel_for)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -361,6 +380,29 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS)
 endif()
 
 # ---------------------------------------------------------------------------
+# C++ micro-benchmarks (benchmarks/bench_*.cc)
+#
+# Header-only, standalone executables (no onnx-light dependency) used to
+# empirically tune the parallel_for cost model. bench_parallel_for measures the
+# thread-dispatch overhead behind kParallelForThreadOverheadCost on an Abs
+# kernel; re-run it to retune the constant for a given machine.
+# ---------------------------------------------------------------------------
+if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_BENCHMARKS)
+  find_package(Threads REQUIRED)
+  file(GLOB _img_bench_sources CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/bench_*.cc")
+  foreach(_img_bench_source IN LISTS _img_bench_sources)
+    get_filename_component(_img_bench_target "${_img_bench_source}" NAME_WE)
+    add_executable(${_img_bench_target} "${_img_bench_source}")
+    target_include_directories(${_img_bench_target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_features(${_img_bench_target} PRIVATE cxx_std_20)
+    target_link_libraries(${_img_bench_target} PRIVATE Threads::Threads)
+    set_property(TARGET ${_img_bench_target} PROPERTY FOLDER "Benchmarks")
+  endforeach()
+endif()
+
+# ---------------------------------------------------------------------------
 # Apply OpenSSF compiler hardening flags to this project's targets when
 # ONNX_HARDENING=ON. When the option is OFF the helper is a no-op so the loop
 # has no effect.
@@ -371,6 +413,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
 endif()
 if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
   list(APPEND _onnx_light_kernel_images_hardening_targets test_image_decoder)
+  list(APPEND _onnx_light_kernel_images_hardening_targets test_parallel_for)
 endif()
 foreach(_t IN LISTS _onnx_light_kernel_images_hardening_targets)
   if(TARGET ${_t})
