@@ -21,6 +21,8 @@ option(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS
        "Build libFuzzer-instrumented C++ fuzz harnesses (fuzz/fuzz_*.cc). Requires Clang and adds -fsanitize=fuzzer,address."
        OFF)
+option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_BENCHMARKS
+       "Build C++ micro-benchmarks (benchmarks/bench_*.cc)." OFF)
 set(ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS "address"
     CACHE STRING
     "Comma-separated sanitizer list for fuzz harnesses (in addition to 'fuzzer').")
@@ -369,6 +371,29 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS)
       "${CMAKE_CURRENT_SOURCE_DIR}/fuzz/make_seed_corpus.cc")
   target_compile_features(make_seed_corpus PRIVATE cxx_std_20)
   set_property(TARGET make_seed_corpus PROPERTY FOLDER "Fuzzers")
+endif()
+
+# ---------------------------------------------------------------------------
+# C++ micro-benchmarks (benchmarks/bench_*.cc)
+#
+# Header-only, standalone executables (no onnx-light dependency) used to
+# empirically tune the parallel_for cost model. bench_parallel_for measures the
+# thread-dispatch overhead behind kParallelForThreadOverheadCost on an Abs
+# kernel; re-run it to retune the constant for a given machine.
+# ---------------------------------------------------------------------------
+if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_BENCHMARKS)
+  find_package(Threads REQUIRED)
+  file(GLOB _img_bench_sources CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/bench_*.cc")
+  foreach(_img_bench_source IN LISTS _img_bench_sources)
+    get_filename_component(_img_bench_target "${_img_bench_source}" NAME_WE)
+    add_executable(${_img_bench_target} "${_img_bench_source}")
+    target_include_directories(${_img_bench_target} PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_features(${_img_bench_target} PRIVATE cxx_std_20)
+    target_link_libraries(${_img_bench_target} PRIVATE Threads::Threads)
+    set_property(TARGET ${_img_bench_target} PROPERTY FOLDER "Benchmarks")
+  endforeach()
 endif()
 
 # ---------------------------------------------------------------------------

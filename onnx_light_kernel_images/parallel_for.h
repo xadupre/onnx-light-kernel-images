@@ -41,13 +41,24 @@ inline constexpr int64_t kParallelForGrainSize = 1 << 15; // 32768 elements
 
 /**
  * Estimated cost, in the same abstract units as the per-iteration cost passed
- * to :cpp:func:`ShouldParallelize`, of dispatching work to a single worker
- * thread (waking it and collecting its result). Interpreting the per-iteration
- * cost in nanoseconds makes this roughly the wake-up latency of a parked
- * worker: only loops whose total estimated cost clears this threshold, summed
- * over the extra workers, are worth parallelising.
+ * to :cpp:func:`ShouldParallelize`, of handing one block of work to an extra
+ * worker thread. With the per-iteration cost expressed in nanoseconds this is
+ * the amount of work each additional worker must save to be worth waking: only
+ * loops whose total estimated cost clears this threshold, summed over the extra
+ * workers, are parallelised.
+ *
+ * The default was measured with benchmarks/bench_parallel_for.cc on an
+ * element-wise Abs kernel (the cheapest possible map body, ~0.66 ns/elem and
+ * memory-bandwidth bound). On a 4-core runner the raw pool wake+join costs
+ * ~11 us per worker, but a forced-parallel Abs only actually beats the serial
+ * loop from ~262k elements, i.e. ~55 us of work per extra worker once the
+ * sublinear scaling of a bandwidth-bound kernel is accounted for. 50 us is a
+ * conservative round value from that break-even: it keeps genuinely cheap
+ * loops single-threaded (setting it too low regresses them) while still
+ * parallelising loops with real per-element work. Re-run the benchmark to
+ * retune it for other hardware.
  */
-inline constexpr double kParallelForThreadOverheadCost = 20000.0; // ~20 microseconds
+inline constexpr double kParallelForThreadOverheadCost = 50000.0; // ~50 microseconds
 
 /**
  * Returns the number of participating threads :cpp:func:`ParallelFor` may use.
