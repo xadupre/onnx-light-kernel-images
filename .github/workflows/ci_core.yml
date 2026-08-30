@@ -102,3 +102,85 @@ jobs:
           name: python-${{ matrix.os }}-py${{ matrix.python-version }}
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  setup_onnx_light_source:
+    name: onnx-light main (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Set parallel build level
+        shell: bash
+        run: |
+          CMAKE_BUILD_PARALLEL_LEVEL=$(python -c 'import os; print(os.cpu_count() or 1)')
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}" >> "$GITHUB_ENV"
+
+      - name: Set up MSVC for Ninja (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+        with:
+          arch: x64
+
+      - name: Select Ninja generator (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
+
+      - name: Build and install onnx-light from source
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+        shell: bash
+        run: |
+          pip install nanobind scikit-build-core setuptools numpy pytest matplotlib ml_dtypes onnxruntime openpyxl pandas tqdm
+          onnx_light_source="${RUNNER_TEMP}/onnx-light"
+          git clone --depth 1 --branch main https://github.com/xadupre/onnx-light.git "${onnx_light_source}"
+          CMAKE_ARGS="-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON"
+          fi
+          export CMAKE_ARGS
+          pip install -C build.verbose=true "${onnx_light_source}" -v
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            echo "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB_DIR=${onnx_light_source}/build" >> "$GITHUB_ENV"
+          fi
+          python - <<'PY'
+          import os
+          from onnx_light import get_cpp_build_info
+
+          variable = {
+              "Linux": "LD_LIBRARY_PATH",
+              "macOS": "DYLD_LIBRARY_PATH",
+              "Windows": "PATH",
+          }[os.environ["RUNNER_OS"]]
+          library_dir = get_cpp_build_info()["library_dir"]
+          current = os.environ.get(variable, "")
+          value = library_dir if not current else library_dir + os.pathsep + current
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"{variable}={value}\n")
+          PY
+
+      - name: Build extension and run C++ tests via setup.py
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+          CMAKE_ARGS: "-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+        run: python setup.py build_ext --inplace --cpp-tests --onnx-light-source
+
+      - name: Run Python image tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q unittests/python/test_image_decoder.py unittests/python/test_image_formats.py

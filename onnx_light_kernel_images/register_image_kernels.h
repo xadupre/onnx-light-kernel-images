@@ -7,7 +7,7 @@
 /**
  * @file register_image_kernels.h
  * @brief Public API for registering the ImageDecoder kernel (BMP, TIFF, JPEG,
- *        PNG, PNM) with the onnx-light kernel dispatch table.
+ *        JPEG2000, PNG, WebP, PNM) with the onnx-light kernel dispatch table.
  *
  * This header is the single entry point for downstream C++ consumers. Call
  * :cpp:func:`RegisterImageKernels` once before running any model that uses
@@ -36,7 +36,9 @@ namespace onnx_light_kernel_images {
  *     compressed with PackBits, LZW or Deflate/ZIP (with optional
  *     horizontal predictor)
  *   - **JPEG** — baseline JFIF (SOF0, 8-bit, 1 or 3 components)
+ *   - **JPEG2000** — JP2 or raw J2K through dynamically loaded libopenjp2
  *   - **PNG** — 8-bit non-interlaced grayscale / truecolor
+ *   - **WebP** — through dynamically loaded libwebp
  *   - **PNM** — Netpbm family (P1–P6 with 8-bit samples)
  *
  * Idempotent: calling this function more than once is safe and cheap.

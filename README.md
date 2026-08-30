@@ -60,9 +60,24 @@ pixi run test-python
 
 ### setup.py with C++ tests
 
+Build the extension and run the C++ unit tests with `ctest`:
+
 ```bash
 python setup.py build_ext --inplace --cpp-tests
 ```
+
+To build and test against the exact C++ runtime loaded by a locally built,
+importable sibling checkout of
+[onnx-light](https://github.com/xadupre/onnx-light), use:
+
+```bash
+PYTHONPATH=../onnx-light \
+python setup.py build_ext --inplace --cpp-tests --onnx-light-source
+```
+
+`--onnx-light-source` rejects mixed installations: the imported Python package,
+headers, extension, and shared C++ libraries must all come from the same
+onnx-light checkout.
 
 ### Pure CMake (C++ only)
 

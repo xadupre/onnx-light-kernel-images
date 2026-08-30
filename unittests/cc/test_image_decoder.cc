@@ -2,16 +2,27 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "onnx_light_kernel_images/kernels/image/legacy_image_codecs.h"
 #include "onnx_light_kernel_images/register_image_kernels.h"
 #include "onnx_light_kernel_images/tiff_compression.h"
 
 #include "onnx.h"
 #include "onnx_core/compute/raw_buffer_allocator.h"
+#if __has_include("onnx_core/runtime/kernels/kernel_context.h")
+#define ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API 1
+#include "onnx_core/backend_test/test_case.h"
+#include "onnx_core/runtime/kernels/kernel_context.h"
+#include "onnx_core/runtime/kernels/kernel_dispatch_table.h"
+#include "onnx_core/runtime/kernels/run_nodes.h"
+#include "onnx_core/runtime/kernels/tensor_compare.h"
+#include "onnx_core/runtime/memory/simple_tensor.h"
+#else
 #include "onnx_core/runtime/kernel_context.h"
 #include "onnx_core/runtime/kernel_dispatch_table.h"
 #include "onnx_core/runtime/run_nodes.h"
-#include "onnx_core/runtime/runtime_context.h"
 #include "onnx_core/runtime/simple_tensor.h"
+#endif
+#include "onnx_core/runtime/runtime_context.h"
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
 
 #include <gtest/gtest.h>
@@ -34,6 +45,33 @@ using onnx_kernels::kernel::ImageDecoder;
 using onnx_kernels::kernel::KernelContext;
 
 namespace {
+
+#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
+using core::backend_test::CollectTestCases;
+using core::backend_test::DataSet;
+using core::backend_test::TestCase;
+using core::runtime::CompareTensors;
+using core::runtime::RunModel;
+using core::runtime::TensorComparison;
+using core::runtime::Tensors;
+
+class TestCaseUnloadGuard {
+public:
+  explicit TestCaseUnloadGuard(TestCase &test_case) : test_case_(test_case) {}
+
+  ~TestCaseUnloadGuard() {
+    if (test_case_.materialized()) {
+      test_case_.unload();
+    }
+  }
+
+  TestCaseUnloadGuard(const TestCaseUnloadGuard &) = delete;
+  TestCaseUnloadGuard &operator=(const TestCaseUnloadGuard &) = delete;
+
+private:
+  TestCase &test_case_;
+};
+#endif
 
 // Minimal 2x2 24-bit uncompressed BMP (BI_RGB, BITMAPINFOHEADER).
 // Pixel layout (bottom-up): row0=[Red, Green], row1=[Blue, White].
@@ -261,11 +299,34 @@ bool LibWebpRuntimeAvailable() {
 }
 
 Tensor MakeEncodedTensor(const unsigned char *data, size_t size) {
+#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
+  return Tensor::FromUint8("", {static_cast<int64_t>(size)},
+                           std::vector<uint8_t>(data, data + size));
+#else
   Tensor t;
   t.data_type = static_cast<int32_t>(DataType::UINT8);
   t.shape = {static_cast<int64_t>(size)};
   t.data.assign(data, data + size);
   return t;
+#endif
+}
+
+Tensor DecodeWithRegisteredKernel(const unsigned char *data, size_t size,
+                                  const std::string &pixel_format) {
+  core::runtime::RuntimeContext rt(KernelContext(core::runtime::DefaultOpset(20)));
+  rt.tensors()["encoded"] = MakeEncodedTensor(data, size);
+
+  NodeProto node;
+  node.set_op_type("ImageDecoder");
+  node.add_input("encoded");
+  node.add_output("image");
+  AttributeProto *attribute = node.add_attribute();
+  attribute->set_name("pixel_format");
+  attribute->set_type(AttributeProto::AttributeType::STRING);
+  attribute->set_s(pixel_format);
+
+  core::runtime::RunNode(node, rt);
+  return rt.tensors().at("image");
 }
 
 } // namespace
@@ -368,10 +429,7 @@ TEST_F(ImageDecoderTest, DecodePnmRgb) {
 }
 
 TEST_F(ImageDecoderTest, DecodeJpeg2000Rgb) {
-  KernelContext ctx(core::runtime::DefaultOpset(20));
-  ImageDecoder decoder(ctx);
-  Tensor encoded = MakeEncodedTensor(kJp2Data, sizeof(kJp2Data));
-  Tensor result = decoder(encoded, "RGB");
+  Tensor result = DecodeWithRegisteredKernel(kJp2Data, sizeof(kJp2Data), "RGB");
 
   ASSERT_EQ(result.shape.size(), 3u);
   EXPECT_EQ(result.shape[2], 3); // channels
@@ -398,10 +456,7 @@ TEST_F(ImageDecoderTest, DecodeJpeg2000Rgb) {
 }
 
 TEST_F(ImageDecoderTest, DecodeWebpRgb) {
-  KernelContext ctx(core::runtime::DefaultOpset(20));
-  ImageDecoder decoder(ctx);
-  Tensor encoded = MakeEncodedTensor(kWebpData, sizeof(kWebpData));
-  Tensor result = decoder(encoded, "RGB");
+  Tensor result = DecodeWithRegisteredKernel(kWebpData, sizeof(kWebpData), "RGB");
 
   ASSERT_EQ(result.shape.size(), 3u);
   EXPECT_EQ(result.shape[2], 3); // channels
@@ -428,10 +483,7 @@ TEST_F(ImageDecoderTest, DecodeWebpRgb) {
 }
 
 TEST_F(ImageDecoderTest, DecodeWebpBgr) {
-  KernelContext ctx(core::runtime::DefaultOpset(20));
-  ImageDecoder decoder(ctx);
-  Tensor encoded = MakeEncodedTensor(kWebpData, sizeof(kWebpData));
-  Tensor result = decoder(encoded, "BGR");
+  Tensor result = DecodeWithRegisteredKernel(kWebpData, sizeof(kWebpData), "BGR");
 
   ASSERT_EQ(result.shape.size(), 3u);
   EXPECT_EQ(result.shape[2], 3); // channels
@@ -452,10 +504,7 @@ TEST_F(ImageDecoderTest, DecodeWebpBgr) {
 }
 
 TEST_F(ImageDecoderTest, DecodeTiffRgb) {
-  KernelContext ctx(core::runtime::DefaultOpset(20));
-  ImageDecoder decoder(ctx);
-  Tensor encoded = MakeEncodedTensor(kTiffData, sizeof(kTiffData));
-  Tensor result = decoder(encoded, "RGB");
+  Tensor result = DecodeWithRegisteredKernel(kTiffData, sizeof(kTiffData), "RGB");
 
   ASSERT_EQ(result.shape.size(), 3u);
   EXPECT_EQ(result.shape[0], 1); // height
@@ -474,10 +523,7 @@ TEST_F(ImageDecoderTest, DecodeTiffRgb) {
 }
 
 TEST_F(ImageDecoderTest, DecodeTiffBgr) {
-  KernelContext ctx(core::runtime::DefaultOpset(20));
-  ImageDecoder decoder(ctx);
-  Tensor encoded = MakeEncodedTensor(kTiffData, sizeof(kTiffData));
-  Tensor result = decoder(encoded, "BGR");
+  Tensor result = DecodeWithRegisteredKernel(kTiffData, sizeof(kTiffData), "BGR");
 
   ASSERT_EQ(result.shape.size(), 3u);
   EXPECT_EQ(result.shape[0], 1);
@@ -524,9 +570,8 @@ TEST_F(ImageDecoderTest, UnrecognizedFormatFallsBackToEmptyMatrix) {
 // TIFF compression support (PackBits / LZW / Deflate).
 //
 // The onnx-light ImageDecoder only decodes uncompressed TIFF, so compressed
-// inputs are first rewritten into an uncompressed baseline TIFF by
-// ``RewriteCompressedTiff`` (mirroring what the registered kernel does before
-// delegating to the base decoder) and then decoded.
+// inputs are rewritten into an uncompressed baseline TIFF by the registered
+// ``TiffAwareImageDecoder`` and then decoded by this package's TIFF decoder.
 // ---------------------------------------------------------------------------
 namespace {
 
@@ -534,12 +579,7 @@ namespace {
 // when the rewrite does not apply.
 Tensor DecodeCompressedTiff(const unsigned char *data, size_t size,
                             const std::string &pixel_format) {
-  std::vector<uint8_t> rewritten;
-  EXPECT_TRUE(onnx_light_kernel_images::RewriteCompressedTiff(data, size, rewritten));
-  Tensor encoded = MakeEncodedTensor(rewritten.data(), rewritten.size());
-  KernelContext ctx(core::runtime::DefaultOpset(20));
-  ImageDecoder decoder(ctx);
-  return decoder(encoded, pixel_format);
+  return DecodeWithRegisteredKernel(data, size, pixel_format);
 }
 
 void ExpectRedGreenRgb(const Tensor &result) {
@@ -591,6 +631,19 @@ TEST_F(ImageDecoderTest, RewriteCompressedTiffRejectsUncompressed) {
       onnx_light_kernel_images::RewriteCompressedTiff(kBmpData, sizeof(kBmpData), rewritten));
 }
 
+TEST_F(ImageDecoderTest, MalformedTiffDimensionsAreRejectedBeforeAllocation) {
+  std::vector<uint8_t> malformed(kTiffData, kTiffData + sizeof(kTiffData));
+  std::fill(malformed.begin() + 18, malformed.begin() + 22, 0xFF);
+  std::fill(malformed.begin() + 30, malformed.begin() + 34, 0xFF);
+
+  int64_t height = 0;
+  int64_t width = 0;
+  std::vector<uint8_t> pixels;
+  EXPECT_FALSE(onnx_light_kernel_images::TryDecodeLegacyCodecImage(
+      malformed.data(), malformed.size(), "RGB", height, width, pixels, nullptr));
+  EXPECT_TRUE(pixels.empty());
+}
+
 // ---------------------------------------------------------------------------
 // End-to-end run of the registered ``TiffAwareImageDecoder`` kernel through
 // ``RunNode`` with a runtime allocator attached to the ``RuntimeContext``.
@@ -626,3 +679,35 @@ TEST_F(ImageDecoderTest, RunNodeDecodesCompressedTiffThroughAllocator) {
   EXPECT_TRUE(result.has_allocation());
   EXPECT_GT(pool.PeakAllocatedSize(), 0u);
 }
+
+#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
+TEST_F(ImageDecoderTest, BackendCasesRunThroughRegisteredKernel) {
+  std::vector<TestCase> cases =
+      CollectTestCases("ImageDecoder", /*include_big=*/false, core::backend_test::TestMode::TEST);
+  ASSERT_FALSE(cases.empty());
+
+  size_t executed = 0;
+  for (TestCase &test_case : cases) {
+    TestCaseUnloadGuard unload_guard(test_case);
+    ASSERT_FALSE(test_case.materialized()) << test_case.name;
+    if (test_case.name.find("_jpeg_") != std::string::npos) {
+      continue;
+    }
+
+    const ModelProto &model = test_case.model();
+    for (const DataSet &data_set : test_case.data_sets()) {
+      ASSERT_TRUE(data_set.expected_outputs_generated) << test_case.name;
+      Tensors inputs = data_set.inputs;
+      Tensors outputs = RunModel(model, std::move(inputs));
+      ASSERT_EQ(outputs.size(), data_set.outputs.size()) << test_case.name;
+      for (size_t i = 0; i < outputs.size(); ++i) {
+        const TensorComparison comparison =
+            CompareTensors(outputs[i], data_set.outputs[i], test_case.rtol, test_case.atol);
+        EXPECT_TRUE(comparison.close) << test_case.name << ": " << comparison.message;
+      }
+      ++executed;
+    }
+  }
+  EXPECT_GT(executed, 0u);
+}
+#endif
