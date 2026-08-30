@@ -11,13 +11,13 @@ namespace nb = nanobind;
 
 NB_MODULE(_imgpykernels, m) {
   m.doc() = "Python bindings for onnx-light-kernel-images: "
-            "registers the ImageDecoder kernel (BMP, TIFF, JPEG, PNG, PNM) "
+            "registers the ImageDecoder kernel (BMP, TIFF, JPEG, JPEG2000, PNG, WebP, PNM) "
             "with the onnx-light kernel dispatch table.";
 
   m.def("register_image_kernels", &onnx_light_kernel_images::RegisterImageKernels,
         "Registers the ImageDecoder kernel (ai.onnx domain) with the onnx-light "
         "kernel dispatch table.\n\n"
-        "Supported formats: BMP, TIFF, JPEG, PNG, PNM.\n"
+        "Supported formats: BMP, TIFF, JPEG, JPEG2000, PNG, WebP, PNM.\n"
         "Idempotent: calling more than once is safe and cheap.");
 
   m.def(

@@ -16,6 +16,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS "Build C++ unit tests." OFF)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON "Build Python extension." ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_INSTALL "Install the C++ library and headers." ON)
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR "" CACHE PATH
+    "Path to a local onnx-light source tree whose headers match the already-built Python runtime.")
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY "" CACHE FILEPATH
+    "Exact onnx-light core shared library loaded by the Python runtime.")
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY "" CACHE FILEPATH
+    "Exact onnx-light proto shared library loaded by the Python runtime.")
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB "" CACHE FILEPATH
+    "Windows import library for ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY.")
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_IMPLIB "" CACHE FILEPATH
+    "Windows import library for ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY.")
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_KERNELS_IMPLIB "" CACHE FILEPATH
+    "Windows import library for the onnx-light kernels runtime.")
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_BACKEND_TEST_IMPLIB "" CACHE FILEPATH
+    "Windows import library for the onnx-light backend-test runtime.")
 option(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE
        "Instrument the C++ targets for code coverage (GCC/Clang only)." OFF)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS
@@ -29,6 +43,15 @@ option(ONNX_HARDENING
 See cmake/Hardening.cmake and \
 https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html"
     OFF)
+
+if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR AND
+   ONNX_LIGHT_KERNEL_IMAGES_INSTALL)
+  message(STATUS
+      "onnx-light-kernel-images: disabling ONNX_LIGHT_KERNEL_IMAGES_INSTALL "
+      "because the local onnx-light runtime is not part of an installable export set.")
+  set(ONNX_LIGHT_KERNEL_IMAGES_INSTALL OFF CACHE BOOL
+      "Install the C++ library and headers." FORCE)
+endif()
 
 if(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE AND
    NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -58,13 +81,103 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Locate onnx-light C++ SDK (0.1.9 release)
+# Locate onnx-light C++ SDK.
 #
 # Strategy:
-#   1. If ONNX_LIGHT_ROOT is set (or the package is already installed), use it.
-#   2. Otherwise, download the prebuilt C++ archive from the GitHub release.
+#   1. With --onnx-light-source, import the exact runtime loaded by Python.
+#   2. If ONNX_LIGHT_ROOT is set (or the package is installed), use it.
+#   3. Otherwise, download the prebuilt C++ archive from the GitHub release.
 # ---------------------------------------------------------------------------
-if(NOT DEFINED ONNX_LIGHT_ROOT)
+if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
+  if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY OR
+     NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY)
+    message(FATAL_ERROR
+        "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY and "
+        "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY are required with "
+        "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR.")
+  endif()
+
+  set(_onnx_light_imported_library_type UNKNOWN)
+  if(WIN32)
+    set(_onnx_light_imported_library_type SHARED)
+  endif()
+
+  add_library(onnx_light::lib_onnx_proto
+      ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
+  set_target_properties(onnx_light::lib_onnx_proto PROPERTIES
+      IMPORTED_LOCATION "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY}")
+  add_library(onnx_light::lib_onnx_core
+      ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
+  set_target_properties(onnx_light::lib_onnx_core PROPERTIES
+      IMPORTED_LOCATION "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY}"
+      INTERFACE_INCLUDE_DIRECTORIES
+          "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light;${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_helpers/include;${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_proto"
+      INTERFACE_LINK_LIBRARIES onnx_light::lib_onnx_proto)
+
+  if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB)
+    if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_IMPLIB)
+      message(FATAL_ERROR
+          "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_IMPLIB is required with "
+          "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB.")
+    endif()
+    set_property(TARGET onnx_light::lib_onnx_core PROPERTY
+        IMPORTED_IMPLIB "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB}")
+    set_property(TARGET onnx_light::lib_onnx_proto PROPERTY
+        IMPORTED_IMPLIB "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_IMPLIB}")
+  endif()
+
+  get_filename_component(_onnx_light_libdir
+      "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY}" DIRECTORY)
+  file(GLOB _onnx_light_kernels_lib
+      "${_onnx_light_libdir}/liblib_onnx_kernels.*"
+      "${_onnx_light_libdir}/lib_onnx_kernels.*")
+  file(GLOB _onnx_light_backend_test_lib
+      "${_onnx_light_libdir}/liblib_onnx_backend_test.*"
+      "${_onnx_light_libdir}/lib_onnx_backend_test.*")
+  if(NOT _onnx_light_kernels_lib)
+    message(FATAL_ERROR
+        "Could not find the onnx-light kernels runtime in ${_onnx_light_libdir}.")
+  endif()
+  list(GET _onnx_light_kernels_lib 0 _onnx_light_kernels_lib)
+  add_library(onnx_light::lib_onnx_kernels
+      ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
+  set_target_properties(onnx_light::lib_onnx_kernels PROPERTIES
+      IMPORTED_LOCATION "${_onnx_light_kernels_lib}"
+      INTERFACE_LINK_LIBRARIES onnx_light::lib_onnx_core)
+
+  if(_onnx_light_backend_test_lib)
+    list(GET _onnx_light_backend_test_lib 0 _onnx_light_backend_test_lib)
+    add_library(onnx_light::lib_onnx_backend_test
+        ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
+    set_target_properties(onnx_light::lib_onnx_backend_test PROPERTIES
+        IMPORTED_LOCATION "${_onnx_light_backend_test_lib}"
+        INTERFACE_LINK_LIBRARIES
+            "onnx_light::lib_onnx_proto;onnx_light::lib_onnx_kernels")
+  elseif(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
+    message(FATAL_ERROR
+        "Could not find the onnx-light backend-test runtime in ${_onnx_light_libdir}.")
+  endif()
+
+  if(WIN32)
+    if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_KERNELS_IMPLIB)
+      message(FATAL_ERROR
+          "The onnx-light kernels Windows import library is required for "
+          "source-runtime integration.")
+    endif()
+    set_property(TARGET onnx_light::lib_onnx_kernels PROPERTY
+        IMPORTED_IMPLIB "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_KERNELS_IMPLIB}")
+    if(TARGET onnx_light::lib_onnx_backend_test)
+      if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_BACKEND_TEST_IMPLIB)
+        message(FATAL_ERROR
+            "The onnx-light backend-test Windows import library is required "
+            "when C++ tests are enabled.")
+      endif()
+      set_property(TARGET onnx_light::lib_onnx_backend_test PROPERTY
+          IMPORTED_IMPLIB
+              "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_BACKEND_TEST_IMPLIB}")
+    endif()
+  endif()
+elseif(NOT DEFINED ONNX_LIGHT_ROOT)
   # Auto-detect platform archive name.
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
@@ -131,9 +244,10 @@ if(NOT DEFINED ONNX_LIGHT_ROOT)
   set(ONNX_LIGHT_ROOT "${onnx_light_cpp_SOURCE_DIR}")
 endif()
 
-# Find the installed onnx-light CMake package.
-list(APPEND CMAKE_PREFIX_PATH "${ONNX_LIGHT_ROOT}")
-find_package(onnx_light REQUIRED)
+if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
+  list(APPEND CMAKE_PREFIX_PATH "${ONNX_LIGHT_ROOT}")
+  find_package(onnx_light REQUIRED)
+endif()
 
 # Find optional dependencies that onnx-light's imported targets need.
 find_package(OpenMP QUIET)
@@ -143,6 +257,7 @@ find_package(OpenSSL QUIET)
 # Sources
 # ---------------------------------------------------------------------------
 set(KERNEL_IMAGES_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/kernels/image/legacy_image_codecs.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/kernels/image/register_image_kernels.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/onnx_light_kernel_images/kernels/image/tiff_compression.cc"
 )
@@ -172,6 +287,17 @@ target_link_libraries(lib_onnx_light_kernel_images PUBLIC
     onnx_light::lib_onnx_core
     onnx_light::lib_onnx_proto
 )
+if(UNIX AND NOT APPLE AND
+   ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
+  target_link_options(lib_onnx_light_kernel_images PRIVATE
+      "LINKER:--no-as-needed")
+  if(_img_lib_type STREQUAL "SHARED")
+    set_target_properties(lib_onnx_light_kernel_images PROPERTIES
+        INSTALL_RPATH "$ORIGIN;$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>"
+        BUILD_RPATH "$ORIGIN;$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>"
+    )
+  endif()
+endif()
 
 # Coverage instrumentation is applied PUBLIC so it propagates to the C++ test
 # executable that links this library, letting gcov emit .gcno/.gcda data for
@@ -303,11 +429,40 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
       onnx_light::lib_onnx_core
       onnx_light::lib_onnx_proto
       GTest::gtest_main)
+  if(TARGET onnx_light::lib_onnx_backend_test)
+    target_link_libraries(test_image_decoder PRIVATE
+        onnx_light::lib_onnx_backend_test)
+  endif()
   target_include_directories(test_image_decoder PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}")
+  if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
+    set_target_properties(test_image_decoder PROPERTIES
+        BUILD_RPATH "$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>")
+    if(WIN32)
+      set(_onnx_light_test_runtime_targets
+          onnx_light::lib_onnx_proto
+          onnx_light::lib_onnx_core
+          onnx_light::lib_onnx_kernels)
+      if(TARGET onnx_light::lib_onnx_backend_test)
+        list(APPEND _onnx_light_test_runtime_targets
+            onnx_light::lib_onnx_backend_test)
+      endif()
+      foreach(_runtime_target IN LISTS _onnx_light_test_runtime_targets)
+        add_custom_command(TARGET test_image_decoder POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:${_runtime_target}>"
+                "$<TARGET_FILE_DIR:test_image_decoder>"
+            VERBATIM)
+      endforeach()
+    endif()
+  endif()
 
   include(GoogleTest)
-  gtest_discover_tests(test_image_decoder)
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
+    gtest_discover_tests(test_image_decoder DISCOVERY_MODE PRE_TEST)
+  else()
+    gtest_discover_tests(test_image_decoder)
+  endif()
 endif()
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import os
 import shlex
 import subprocess
 import sys
+from importlib.util import find_spec
 from pathlib import Path
 
 
@@ -35,6 +36,165 @@ def _default_parallel_jobs():
     return os.cpu_count() or 1
 
 
+def _ctest_command(build_temp):
+    """Returns the ctest command that runs the C++ unit tests."""
+    return [
+        "ctest",
+        "--test-dir",
+        str(build_temp),
+        "--output-on-failure",
+        "--build-config",
+        "Release",
+        "--timeout",
+        "240",
+        "--repeat",
+        "until-pass:2",
+    ]
+
+
+def _onnx_light_from_pythonpath(header):
+    """Returns the first onnx-light package explicitly selected by PYTHONPATH."""
+    for entry in os.environ.get("PYTHONPATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        package_dir = Path(entry).resolve() / "onnx_light"
+        if (package_dir / header).is_file():
+            return package_dir
+    return None
+
+
+def _onnx_light_source_build_info():
+    """Returns paths for the C++ runtime built in the local onnx-light tree."""
+    import onnx_light
+
+    header = Path("onnx_core/runtime/kernels/kernel_dispatch_table.h")
+    pythonpath_dir = _onnx_light_from_pythonpath(header)
+    configured_source = os.environ.get("ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR")
+    if pythonpath_dir is not None:
+        include_dir = pythonpath_dir
+    elif configured_source:
+        configured_dir = Path(configured_source).resolve()
+        include_dir = (
+            configured_dir / "onnx_light"
+            if (configured_dir / "onnx_light" / header).is_file()
+            else configured_dir
+        )
+        if not (include_dir / header).is_file():
+            raise FileNotFoundError(
+                "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR does not contain "
+                f"the onnx-light headers: {configured_dir}"
+            )
+    else:
+        sibling_dir = Path(__file__).resolve().parent.parent / "onnx-light" / "onnx_light"
+        if (sibling_dir / header).is_file():
+            include_dir = sibling_dir
+        else:
+            include_dir = Path(onnx_light.__file__).resolve().parent
+
+    if not (include_dir / header).is_file():
+        raise FileNotFoundError(
+            f"Could not find the onnx-light C++ headers under {include_dir}. Build "
+            "onnx-light from a sibling checkout, add it to PYTHONPATH, or set "
+            "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR before using "
+            "--onnx-light-source."
+        )
+
+    if pythonpath_dir is not None:
+        imported_dir = Path(onnx_light.__file__).resolve().parent
+        if imported_dir != include_dir:
+            raise RuntimeError(
+                f"PYTHONPATH selects onnx-light from {include_dir}, but Python imported "
+                f"it from {imported_dir}."
+            )
+        extension_spec = find_spec("onnx_light.onnx_py._onnxpyprotoop")
+        extension_path = (
+            Path(extension_spec.origin).resolve()
+            if extension_spec is not None and extension_spec.origin is not None
+            else None
+        )
+        info = dict(onnx_light.get_cpp_build_info())
+        reported_include_dir = Path(info.get("include_dir", "")).resolve()
+        runtime_dir = Path(info.get("library_dir", "")).resolve()
+        if reported_include_dir != include_dir:
+            raise RuntimeError(
+                f"PYTHONPATH selects onnx-light from {include_dir}, but the imported "
+                f"runtime reports headers from {reported_include_dir}."
+            )
+        if extension_path is None or extension_path.parent != runtime_dir:
+            raise RuntimeError(
+                f"PYTHONPATH selects onnx-light from {include_dir}, but its native "
+                f"extension resolves to {extension_path} instead of {runtime_dir}. "
+                "Remove the conflicting onnx-light installation; mixing runtimes "
+                "is not supported."
+            )
+        info["include_dir"] = str(include_dir)
+    else:
+        info = dict(onnx_light.get_cpp_build_info())
+        info["include_dir"] = str(include_dir)
+
+    for key in ("core_library", "proto_library"):
+        if key not in info or not Path(info[key]).is_file():
+            raise FileNotFoundError(
+                f"onnx-light did not report a usable {key!r}. Build and install "
+                "onnx-light before using --onnx-light-source."
+            )
+    import_library_dir = os.environ.get("ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB_DIR")
+    if import_library_dir:
+        root = Path(import_library_dir)
+        if not root.is_dir():
+            raise FileNotFoundError(f"onnx-light import-library directory does not exist: {root}")
+        components = {
+            "core_import_library": "lib_onnx_core.lib",
+            "proto_import_library": "lib_onnx_proto.lib",
+            "kernels_import_library": "lib_onnx_kernels.lib",
+            "backend_test_import_library": "lib_onnx_backend_test.lib",
+        }
+        for key, filename in components.items():
+            matches = sorted(root.glob(f"**/{filename}"))
+            if not matches:
+                raise FileNotFoundError(f"Could not find {filename!r} under {root}.")
+            info[key] = str(matches[0].resolve())
+    return info
+
+
+def _add_onnx_light_source_defines(cmake_args, build_info=None):
+    """Links to the C++ runtime loaded by a locally built onnx-light."""
+    info = _onnx_light_source_build_info() if build_info is None else build_info
+    cmake_args = _set_cmake_define(
+        cmake_args,
+        "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR",
+        str(Path(info["include_dir"]).parent),
+    )
+    cmake_args = _set_cmake_define(
+        cmake_args,
+        "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY",
+        info["core_library"],
+    )
+    cmake_args = _set_cmake_define(
+        cmake_args,
+        "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY",
+        info["proto_library"],
+    )
+    for key, define in (
+        ("core_import_library", "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB"),
+        (
+            "proto_import_library",
+            "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_IMPLIB",
+        ),
+        (
+            "kernels_import_library",
+            "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_KERNELS_IMPLIB",
+        ),
+        (
+            "backend_test_import_library",
+            "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_BACKEND_TEST_IMPLIB",
+        ),
+    ):
+        if key in info:
+            cmake_args = _set_cmake_define(cmake_args, define, info[key])
+    return cmake_args
+
+
 try:
     from setuptools import Command, Distribution, setup
 except ModuleNotFoundError:
@@ -52,6 +212,7 @@ except ModuleNotFoundError:
 
         inplace = False
         cpp_tests = False
+        onnx_light_source = False
         dry_run = False
         build_temp = "build/temp"
         build_lib = "build/lib"
@@ -64,6 +225,8 @@ except ModuleNotFoundError:
                 inplace = True
             elif arg == "--cpp-tests":
                 cpp_tests = True
+            elif arg == "--onnx-light-source":
+                onnx_light_source = True
             elif arg in {"--dry-run", "-n"}:
                 dry_run = True
             elif arg.startswith("--build-temp="):
@@ -111,6 +274,8 @@ except ModuleNotFoundError:
             cmake_args = _set_cmake_define(
                 cmake_args, "ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS", "ON"
             )
+        if onnx_light_source:
+            cmake_args = _add_onnx_light_source_defines(cmake_args)
         _spawn(
             [
                 "cmake",
@@ -128,9 +293,19 @@ except ModuleNotFoundError:
             build_cmd += ["--parallel", str(parallel)]
         _spawn(build_cmd, dry_run)
         _spawn(
-            ["cmake", "--install", str(build_temp_path), "--prefix", str(install_prefix)],
+            [
+                "cmake",
+                "--install",
+                str(build_temp_path),
+                "--config",
+                "Release",
+                "--prefix",
+                str(install_prefix),
+            ],
             dry_run,
         )
+        if cpp_tests:
+            _spawn(_ctest_command(build_temp_path), dry_run)
         return True
 
     if _run_build_ext_without_packaging(sys.argv[1:]):
@@ -155,9 +330,17 @@ class BuildExt(Command):
         ("build-temp=", "t", "temporary build directory"),
         ("build-lib=", "b", "build directory for platform-specific files"),
         ("cpp-tests", None, "enable the C++ unit tests"),
+        (
+            "onnx-light-source",
+            None,
+            (
+                "build against the already-built C++ runtime loaded by a local, "
+                "importable onnx-light"
+            ),
+        ),
         ("parallel=", "j", "number of parallel build jobs"),
     ]
-    boolean_options = ["inplace", "cpp-tests"]
+    boolean_options = ["inplace", "cpp-tests", "onnx-light-source"]
 
     def initialize_options(self):
         """Initializes default values for command options."""
@@ -165,6 +348,7 @@ class BuildExt(Command):
         self.build_temp = None
         self.build_lib = None
         self.cpp_tests = False
+        self.onnx_light_source = False
         self.parallel = _default_parallel_jobs()
 
     def finalize_options(self):
@@ -188,6 +372,8 @@ class BuildExt(Command):
             cmake_args = _set_cmake_define(
                 cmake_args, "ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS", "ON"
             )
+        if self.onnx_light_source:
+            cmake_args = _add_onnx_light_source_defines(cmake_args)
 
         self.spawn(
             [
@@ -204,7 +390,19 @@ class BuildExt(Command):
         if self.parallel is not None:
             build_cmd += ["--parallel", str(self.parallel)]
         self.spawn(build_cmd)
-        self.spawn(["cmake", "--install", str(build_temp), "--prefix", str(install_prefix)])
+        self.spawn(
+            [
+                "cmake",
+                "--install",
+                str(build_temp),
+                "--config",
+                "Release",
+                "--prefix",
+                str(install_prefix),
+            ]
+        )
+        if self.cpp_tests:
+            self.spawn(_ctest_command(build_temp))
 
 
 setup(
