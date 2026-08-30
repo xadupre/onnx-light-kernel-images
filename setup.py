@@ -112,29 +112,22 @@ def _onnx_light_source_build_info():
             if extension_spec is not None and extension_spec.origin is not None
             else None
         )
-        runtime_dir = include_dir / "onnx_py"
+        info = dict(onnx_light.get_cpp_build_info())
+        reported_include_dir = Path(info.get("include_dir", "")).resolve()
+        runtime_dir = Path(info.get("library_dir", "")).resolve()
+        if reported_include_dir != include_dir:
+            raise RuntimeError(
+                f"PYTHONPATH selects onnx-light from {include_dir}, but the imported "
+                f"runtime reports headers from {reported_include_dir}."
+            )
         if extension_path is None or extension_path.parent != runtime_dir:
             raise RuntimeError(
                 f"PYTHONPATH selects onnx-light from {include_dir}, but its native "
-                f"extension resolves to {extension_path}. Remove the conflicting "
-                "onnx-light installation; mixing runtimes is not supported."
+                f"extension resolves to {extension_path} instead of {runtime_dir}. "
+                "Remove the conflicting onnx-light installation; mixing runtimes "
+                "is not supported."
             )
-
-        def find_runtime_library(name):
-            for pattern in (f"lib{name}.so", f"lib{name}.dylib", f"{name}.dll"):
-                matches = sorted(runtime_dir.glob(pattern))
-                if matches:
-                    return str(matches[0].resolve())
-            raise FileNotFoundError(
-                f"Could not find {name} next to the PYTHONPATH runtime in {runtime_dir}."
-            )
-
-        info = {
-            "include_dir": str(include_dir),
-            "library_dir": str(runtime_dir),
-            "core_library": find_runtime_library("lib_onnx_core"),
-            "proto_library": find_runtime_library("lib_onnx_proto"),
-        }
+        info["include_dir"] = str(include_dir)
     else:
         info = dict(onnx_light.get_cpp_build_info())
         info["include_dir"] = str(include_dir)

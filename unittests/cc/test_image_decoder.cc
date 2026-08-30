@@ -50,6 +50,8 @@ namespace {
 using core::backend_test::CollectTestCases;
 using core::backend_test::DataSet;
 using core::backend_test::TestCase;
+using core::backend_test::TestCaseKind;
+using core::backend_test::TestCaseTag;
 using core::runtime::CompareTensors;
 using core::runtime::RunModel;
 using core::runtime::TensorComparison;
@@ -690,6 +692,8 @@ TEST_F(ImageDecoderTest, BackendCasesRunThroughRegisteredKernel) {
   for (TestCase &test_case : cases) {
     TestCaseUnloadGuard unload_guard(test_case);
     ASSERT_FALSE(test_case.materialized()) << test_case.name;
+    EXPECT_EQ(test_case.kind, TestCaseKind::NODE) << test_case.name;
+    EXPECT_EQ(test_case.tag, TestCaseTag::NONE) << test_case.name;
     if (test_case.name.find("_jpeg_") != std::string::npos) {
       continue;
     }
