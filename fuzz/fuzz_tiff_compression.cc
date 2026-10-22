@@ -14,16 +14,15 @@
 #include "onnx_light_kernel_images/register_image_kernels.h"
 #include "onnx_light_kernel_images/tiff_compression.h"
 
-#include "onnx_core/runtime/kernel_context.h"
+#include "onnx_core/runtime/kernels/kernel_context.h"
+#include "onnx_core/runtime/memory/simple_tensor.h"
 #include "onnx_core/runtime/runtime_context.h"
-#include "onnx_core/runtime/simple_tensor.h"
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
-using onnx_light::core::runtime::DataType;
 using onnx_light::core::runtime::DefaultOpset;
 using onnx_light::core::runtime::Tensor;
 using onnx_light::onnx_kernels::kernel::ImageDecoder;
@@ -46,10 +45,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   // The rewrite succeeded: exercise the ImageDecoder on the produced
   // uncompressed TIFF, just like TiffAwareImageDecoder does at runtime.
   onnx_light_kernel_images::RegisterImageKernels();
-  Tensor encoded;
-  encoded.data_type = static_cast<int32_t>(DataType::UINT8);
-  encoded.shape = {static_cast<int64_t>(rewritten.size())};
-  encoded.data.assign(rewritten.begin(), rewritten.end());
+  Tensor encoded = Tensor::FromUint8("", {static_cast<int64_t>(rewritten.size())}, rewritten);
 
   KernelContext ctx(DefaultOpset(20));
   ImageDecoder decoder(ctx);
