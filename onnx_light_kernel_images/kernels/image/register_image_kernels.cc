@@ -106,8 +106,14 @@ public:
 };
 
 template <class KernelT> NodeKernelFn MakeKernel() {
+#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API
+  return [](const NodeProto &node, RuntimeContext &rt,
+            const auto &kernel_ctx) -> std::unique_ptr<KernelBase> {
+    auto kernel = std::make_unique<KernelT>(kernel_ctx);
+#else
   return [](const NodeProto &node, RuntimeContext &rt) -> std::unique_ptr<KernelBase> {
     auto kernel = std::make_unique<KernelT>(rt.kernel_ctx());
+#endif
     kernel->set_node(node);
     return kernel;
   };
