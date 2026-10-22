@@ -88,7 +88,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-The build automatically downloads the onnx-light 0.1.9 C++ release archive.
+The build automatically downloads the onnx-light 0.2.0 C++ release archive.
 To use a custom install, set `-DONNX_LIGHT_ROOT=/path/to/onnx-light-cpp`.
 
 ### Compiler hardening

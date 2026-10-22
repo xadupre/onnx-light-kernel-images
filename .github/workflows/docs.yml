@@ -52,14 +52,14 @@ jobs:
       # That requires the *full* onnx-light Python runtime; the wheels published
       # in the 0.1.9 release are reduced builds (ONNX_LIGHT_BUILD_KERNELS=OFF)
       # without the operator-kernel runtime, so build and install onnx-light
-      # 0.1.9 from source to match the C++ archive the kernel links against.
+      # 0.2.0 from source to match the C++ archive the kernel links against.
       - name: Build and install onnx-light Python (full runtime)
         env:
           SCCACHE_GHA_ENABLED: "true"
           CMAKE_ARGS: "-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
-        run: pip install "onnx-light @ git+https://github.com/xadupre/onnx-light@0.1.9" -v
+        run: pip install "onnx-light @ git+https://github.com/xadupre/onnx-light@0.2.0" -v
 
-      # Build the ImageDecoder kernel (downloads the prebuilt onnx-light 0.1.9
+      # Build the ImageDecoder kernel (downloads the prebuilt onnx-light 0.2.0
       # C++ archive) and install the documentation dependencies.
       - name: Build and install package with docs extras
         env:

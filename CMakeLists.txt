@@ -102,9 +102,9 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
     set(_onnx_light_imported_library_type SHARED)
   endif()
 
-  add_library(onnx_light::lib_onnx_proto
+  add_library(onnx_proto::lib_onnx_proto
       ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
-  set_target_properties(onnx_light::lib_onnx_proto PROPERTIES
+  set_target_properties(onnx_proto::lib_onnx_proto PROPERTIES
       IMPORTED_LOCATION "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY}")
   add_library(onnx_light::lib_onnx_core
       ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
@@ -112,7 +112,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
       IMPORTED_LOCATION "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES
           "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light;${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_helpers/include;${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_proto"
-      INTERFACE_LINK_LIBRARIES onnx_light::lib_onnx_proto)
+      INTERFACE_LINK_LIBRARIES onnx_proto::lib_onnx_proto)
 
   if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB)
     if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_IMPLIB)
@@ -122,7 +122,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
     endif()
     set_property(TARGET onnx_light::lib_onnx_core PROPERTY
         IMPORTED_IMPLIB "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB}")
-    set_property(TARGET onnx_light::lib_onnx_proto PROPERTY
+    set_property(TARGET onnx_proto::lib_onnx_proto PROPERTY
         IMPORTED_IMPLIB "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_IMPLIB}")
   endif()
 
@@ -152,7 +152,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
     set_target_properties(onnx_light::lib_onnx_backend_test PROPERTIES
         IMPORTED_LOCATION "${_onnx_light_backend_test_lib}"
         INTERFACE_LINK_LIBRARIES
-            "onnx_light::lib_onnx_proto;onnx_light::lib_onnx_kernels")
+            "onnx_proto::lib_onnx_proto;onnx_light::lib_onnx_kernels")
   elseif(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
     message(FATAL_ERROR
         "Could not find the onnx-light backend-test runtime in ${_onnx_light_libdir}.")
@@ -198,7 +198,7 @@ elseif(NOT DEFINED ONNX_LIGHT_ROOT)
   endif()
 
   set(_onnx_light_url
-      "https://github.com/xadupre/onnx-light/releases/download/0.1.9/${_onnx_light_archive}")
+      "https://github.com/xadupre/onnx-light/releases/download/0.2.0/${_onnx_light_archive}")
 
   FetchContent_Declare(
     onnx_light_cpp
@@ -285,7 +285,7 @@ target_compile_features(lib_onnx_light_kernel_images PUBLIC cxx_std_20)
 target_link_libraries(lib_onnx_light_kernel_images PUBLIC
     onnx_light::lib_onnx_kernels
     onnx_light::lib_onnx_core
-    onnx_light::lib_onnx_proto
+    onnx_proto::lib_onnx_proto
 )
 if(UNIX AND NOT APPLE AND
    ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
@@ -427,7 +427,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
       lib_onnx_light_kernel_images
       onnx_light::lib_onnx_kernels
       onnx_light::lib_onnx_core
-      onnx_light::lib_onnx_proto
+      onnx_proto::lib_onnx_proto
       GTest::gtest_main)
   if(TARGET onnx_light::lib_onnx_backend_test)
     target_link_libraries(test_image_decoder PRIVATE
@@ -440,7 +440,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
         BUILD_RPATH "$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>")
     if(WIN32)
       set(_onnx_light_test_runtime_targets
-          onnx_light::lib_onnx_proto
+          onnx_proto::lib_onnx_proto
           onnx_light::lib_onnx_core
           onnx_light::lib_onnx_kernels)
       if(TARGET onnx_light::lib_onnx_backend_test)
@@ -498,7 +498,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS)
         lib_onnx_light_kernel_images
         onnx_light::lib_onnx_kernels
         onnx_light::lib_onnx_core
-        onnx_light::lib_onnx_proto)
+        onnx_proto::lib_onnx_proto)
     target_compile_options(${_img_fuzz_target} PRIVATE
         "-fsanitize=fuzzer-no-link,${ONNX_LIGHT_KERNEL_IMAGES_FUZZER_SANITIZERS}")
     target_link_options(${_img_fuzz_target} PRIVATE
