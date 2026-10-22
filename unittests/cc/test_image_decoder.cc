@@ -10,6 +10,7 @@
 #include "onnx_core/compute/raw_buffer_allocator.h"
 #if __has_include("onnx_core/runtime/kernels/kernel_context.h")
 #define ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API 1
+#include "onnx_core/backend_test/expect.h"
 #include "onnx_core/backend_test/test_case.h"
 #include "onnx_core/runtime/kernels/kernel_context.h"
 #include "onnx_core/runtime/kernels/kernel_dispatch_table.h"
@@ -29,6 +30,7 @@
 
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #if defined(_WIN32)
@@ -313,9 +315,12 @@ Tensor MakeEncodedTensor(const unsigned char *data, size_t size) {
 #endif
 }
 
+template <typename Runtime = core::runtime::RuntimeContext>
 Tensor DecodeWithRegisteredKernel(const unsigned char *data, size_t size,
                                   const std::string &pixel_format) {
-  core::runtime::RuntimeContext rt(KernelContext(core::runtime::DefaultOpset(20)));
+  const auto opset = core::runtime::DefaultOpset(20);
+  const KernelContext ctx{opset};
+  Runtime rt(ctx);
   rt.tensors()["encoded"] = MakeEncodedTensor(data, size);
 
   NodeProto node;
@@ -330,6 +335,69 @@ Tensor DecodeWithRegisteredKernel(const unsigned char *data, size_t size,
   core::runtime::RunNode(node, rt);
   return rt.tensors().at("image");
 }
+
+#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
+template <typename Runtime = core::runtime::RuntimeContext>
+std::vector<TestCase> CollectLocalImageDecoderCases(core::backend_test::TestMode mode) {
+  struct Image {
+    const char *name;
+    const unsigned char *data;
+    size_t size;
+  };
+  const Image images[] = {
+      {"bmp", kBmpData, sizeof(kBmpData)},
+      {"pnm", kPnmData, sizeof(kPnmData)},
+      {"jpeg2000", kJp2Data, sizeof(kJp2Data)},
+      {"webp", kWebpData, sizeof(kWebpData)},
+      {"tiff", kTiffData, sizeof(kTiffData)},
+      {"tiff_packbits", kTiffPackBitsData, sizeof(kTiffPackBitsData)},
+      {"tiff_lzw", kTiffLzwData, sizeof(kTiffLzwData)},
+      {"tiff_deflate", kTiffDeflateData, sizeof(kTiffDeflateData)},
+  };
+  std::vector<TestCase> cases;
+  for (const Image &image : images) {
+    for (const char *pixel_format : {"RGB", "BGR", "Grayscale"}) {
+      NodeProto node;
+      node.set_op_type("ImageDecoder");
+      node.add_input("encoded");
+      node.add_output("image");
+      AttributeProto *attribute = node.add_attribute();
+      attribute->set_name("pixel_format");
+      attribute->set_type(AttributeProto::AttributeType::STRING);
+      attribute->set_s(pixel_format);
+      std::string name = std::string("test_local_image_decoder_") + image.name + "_" + pixel_format;
+      if (mode == core::backend_test::TestMode::BENCHMARK) {
+        name += "_benchmark";
+      }
+      auto make_io = [image, pixel_format]() -> core::backend_test::IoData {
+        Tensor input = MakeEncodedTensor(image.data, image.size);
+        Tensor output = DecodeWithRegisteredKernel<Runtime>(image.data, image.size, pixel_format);
+        return {{std::move(input)}, {std::move(output)}};
+      };
+      // Builders retain only static image metadata, never a kernel or runtime context.
+      static_assert(std::is_trivially_copyable_v<decltype(make_io)>);
+      core::backend_test::Expect(cases, std::move(node), std::move(name),
+                                 {core::runtime::DefaultOpset(20)}, std::move(make_io));
+    }
+  }
+  return cases;
+}
+
+// Exercise real kernel resolution while tracking the lifetime of its owning runtime.
+class TrackedImageRuntime : public core::runtime::RuntimeContext {
+public:
+  explicit TrackedImageRuntime(const KernelContext &ctx) : RuntimeContext(ctx) {
+    ++constructed;
+    ++alive;
+  }
+  ~TrackedImageRuntime() { --alive; }
+  TrackedImageRuntime(const TrackedImageRuntime &) = delete;
+  TrackedImageRuntime &operator=(const TrackedImageRuntime &) = delete;
+
+  static inline size_t constructed = 0;
+  static inline size_t alive = 0;
+};
+#endif
 
 } // namespace
 
@@ -683,6 +751,61 @@ TEST_F(ImageDecoderTest, RunNodeDecodesCompressedTiffThroughAllocator) {
 }
 
 #if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
+TEST_F(ImageDecoderTest, BackendCaseReferenceRuntimeIsScopedToMaterialization) {
+  for (auto mode : {core::backend_test::TestMode::TEST, core::backend_test::TestMode::BENCHMARK}) {
+    TrackedImageRuntime::constructed = 0;
+    auto cases = CollectLocalImageDecoderCases<TrackedImageRuntime>(mode);
+    ASSERT_EQ(cases.size(), 24u);
+    EXPECT_EQ(TrackedImageRuntime::constructed, 0u);
+    EXPECT_EQ(TrackedImageRuntime::alive, 0u);
+    size_t built = 0;
+    for (TestCase &test_case : cases) {
+      ASSERT_FALSE(test_case.materialized()) << test_case.name;
+      ASSERT_TRUE(test_case.build) << test_case.name;
+      // Invoke the persistent builder twice without unloading it.
+      for (int repeat = 0; repeat < 2; ++repeat) {
+        auto data = [](auto &build) {
+          if constexpr (std::is_invocable_v<decltype(build), bool>) {
+            return build(true);
+          } else {
+            return build();
+          }
+        }(test_case.build);
+        EXPECT_EQ(TrackedImageRuntime::constructed, ++built) << test_case.name;
+        EXPECT_EQ(TrackedImageRuntime::alive, 0u) << test_case.name;
+        ASSERT_EQ(data.data_sets.size(), 1u);
+        EXPECT_EQ(data.data_sets[0].inputs.size(), 1u);
+        EXPECT_EQ(data.data_sets[0].outputs.size(), 1u);
+      }
+      test_case.Materialize();
+      EXPECT_EQ(TrackedImageRuntime::constructed, ++built) << test_case.name;
+      EXPECT_EQ(TrackedImageRuntime::alive, 0u) << test_case.name;
+      ASSERT_EQ(test_case.data_sets().size(), 1u);
+      EXPECT_EQ(TrackedImageRuntime::constructed, built) << test_case.name;
+    }
+  }
+}
+
+TEST_F(ImageDecoderTest, LocalBackendCasesRunThroughRegisteredKernel) {
+  for (auto mode : {core::backend_test::TestMode::TEST, core::backend_test::TestMode::BENCHMARK}) {
+    auto cases = CollectLocalImageDecoderCases(mode);
+    ASSERT_EQ(cases.size(), 24u);
+    for (TestCase &test_case : cases) {
+      TestCaseUnloadGuard unload_guard(test_case);
+      const ModelProto &model = test_case.model();
+      for (const DataSet &data_set : test_case.data_sets()) {
+        Tensors outputs = RunModel(model, data_set.inputs);
+        ASSERT_EQ(outputs.size(), data_set.outputs.size()) << test_case.name;
+        for (size_t i = 0; i < outputs.size(); ++i) {
+          const auto comparison =
+              CompareTensors(outputs[i], data_set.outputs[i], test_case.rtol, test_case.atol);
+          EXPECT_TRUE(comparison.close) << test_case.name << ": " << comparison.message;
+        }
+      }
+    }
+  }
+}
+
 TEST_F(ImageDecoderTest, BackendCasesRunThroughRegisteredKernel) {
   std::vector<TestCase> cases =
       CollectTestCases("ImageDecoder", /*include_big=*/false, core::backend_test::TestMode::TEST);
