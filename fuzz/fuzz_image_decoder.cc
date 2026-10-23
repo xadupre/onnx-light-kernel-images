@@ -12,16 +12,16 @@
 
 #include "onnx_light_kernel_images/register_image_kernels.h"
 
-#include "onnx_core/runtime/kernel_context.h"
+#include "onnx_core/runtime/kernels/kernel_context.h"
+#include "onnx_core/runtime/memory/simple_tensor.h"
 #include "onnx_core/runtime/runtime_context.h"
-#include "onnx_core/runtime/simple_tensor.h"
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
-using onnx_light::core::runtime::DataType;
 using onnx_light::core::runtime::DefaultOpset;
 using onnx_light::core::runtime::Tensor;
 using onnx_light::onnx_kernels::kernel::ImageDecoder;
@@ -32,10 +32,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   // is idempotent, so calling it on every input is cheap.
   onnx_light_kernel_images::RegisterImageKernels();
 
-  Tensor encoded;
-  encoded.data_type = static_cast<int32_t>(DataType::UINT8);
-  encoded.shape = {static_cast<int64_t>(size)};
-  encoded.data.assign(data, data + size);
+  Tensor encoded =
+      Tensor::FromUint8("", {static_cast<int64_t>(size)}, std::vector<uint8_t>(data, data + size));
 
   for (const char *pixel_format : {"RGB", "BGR", "Grayscale"}) {
     KernelContext ctx(DefaultOpset(20));
