@@ -30,6 +30,8 @@ set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_KERNELS_IMPLIB "" CACHE FILEPATH
     "Windows import library for the onnx-light kernels runtime.")
 set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_BACKEND_TEST_IMPLIB "" CACHE FILEPATH
     "Windows import library for the onnx-light backend-test runtime.")
+set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_THREADS_IMPLIB "" CACHE FILEPATH
+    "Windows import library for the onnx-light threads runtime.")
 option(ONNX_LIGHT_KERNEL_IMAGES_ENABLE_COVERAGE
        "Instrument the C++ targets for code coverage (GCC/Clang only)." OFF)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_FUZZERS
@@ -128,6 +130,32 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
 
   get_filename_component(_onnx_light_libdir
       "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY}" DIRECTORY)
+  file(GLOB _onnx_light_threads_lib
+      "${_onnx_light_libdir}/liblib_onnx_threads.*"
+      "${_onnx_light_libdir}/lib_onnx_threads.*")
+  if(NOT _onnx_light_threads_lib)
+    message(FATAL_ERROR
+        "Could not find the onnx-light threads runtime in ${_onnx_light_libdir}.")
+  endif()
+  list(GET _onnx_light_threads_lib 0 _onnx_light_threads_lib)
+  add_library(onnx_threads::lib_onnx_threads
+      ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
+  set_target_properties(onnx_threads::lib_onnx_threads PROPERTIES
+      IMPORTED_LOCATION "${_onnx_light_threads_lib}"
+      INTERFACE_INCLUDE_DIRECTORIES
+          "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_threads/include")
+  set_property(TARGET onnx_proto::lib_onnx_proto APPEND PROPERTY
+      INTERFACE_LINK_LIBRARIES onnx_threads::lib_onnx_threads)
+  if(WIN32)
+    if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_THREADS_IMPLIB)
+      message(FATAL_ERROR
+          "The onnx-light threads Windows import library is required for "
+          "source-runtime integration.")
+    endif()
+    set_target_properties(onnx_threads::lib_onnx_threads PROPERTIES
+        IMPORTED_IMPLIB "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_THREADS_IMPLIB}"
+        INTERFACE_COMPILE_DEFINITIONS ONNX_THREADS_SHARED)
+  endif()
   file(GLOB _onnx_light_kernels_lib
       "${_onnx_light_libdir}/liblib_onnx_kernels.*"
       "${_onnx_light_libdir}/lib_onnx_kernels.*")
@@ -440,6 +468,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS)
         BUILD_RPATH "$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>")
     if(WIN32)
       set(_onnx_light_test_runtime_targets
+          onnx_threads::lib_onnx_threads
           onnx_proto::lib_onnx_proto
           onnx_light::lib_onnx_core
           onnx_light::lib_onnx_kernels)

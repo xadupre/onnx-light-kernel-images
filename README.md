@@ -35,6 +35,12 @@ JPEG2000 and WebP are decoded through the OpenJPEG (`libopenjp2`) and
 corresponding library is not available the decoder returns an empty matrix, as
 described by the ONNX `ImageDecoder` schema.
 
+TIFF pixel conversion and WebP/JPEG2000 post-decode conversion use onnx-light's
+`ParallelFor`, reusing the active CPU executor (or its shared global thread pool
+outside an executor scope). Images below the default 32,768-pixel threshold and
+single-thread executors run inline. Codec decompression remains serial; BMP,
+JPEG, PNG and PNM decoding is delegated to onnx-light.
+
 ## Build from source
 
 ### Prerequisites

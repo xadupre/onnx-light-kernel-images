@@ -25,6 +25,8 @@
 #endif
 #include "onnx_core/runtime/runtime_context.h"
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
+#include "onnx_threads/cpu_executor.h"
+#include "onnx_threads/parallel_for.h"
 
 #include <gtest/gtest.h>
 
@@ -315,6 +317,51 @@ Tensor MakeEncodedTensor(const unsigned char *data, size_t size) {
 #endif
 }
 
+// Three strips in reverse storage order, with a partial final strip.
+std::vector<uint8_t> MakeStripTiff(uint32_t width, bool grayscale) {
+  const uint32_t height = 5;
+  const uint32_t samples = grayscale ? 1 : 3;
+  const uint32_t row_bytes = width * samples;
+  const uint32_t pixel_offset = 152;
+  std::vector<uint8_t> data(kTiffData, kTiffData + 128);
+  data.resize(pixel_offset + row_bytes * height);
+  const auto put32 = [&](size_t offset, uint32_t value) {
+    for (size_t byte = 0; byte < 4; ++byte) {
+      data[offset + byte] = static_cast<uint8_t>(value >> (byte * 8));
+    }
+  };
+  data[12] = 4; // ImageWidth uses LONG to include widths above 65535.
+  put32(18, width);
+  put32(30, height);
+  if (grayscale) {
+    put32(38, 1); // BitsPerSample count
+    put32(42, 8);
+    put32(66, 1); // BlackIsZero
+    put32(90, 1); // SamplesPerPixel
+  }
+  put32(74, 3); // StripOffsets count
+  put32(78, 128);
+  put32(102, 2); // RowsPerStrip
+  put32(110, 3); // StripByteCounts count
+  put32(114, 140);
+  for (uint32_t strip = 0; strip < 3; ++strip) {
+    const uint32_t rows = strip == 2 ? 1 : 2;
+    const uint32_t offset = pixel_offset + (strip == 0 ? 3 : strip == 1 ? 1 : 0) * row_bytes;
+    put32(128 + strip * 4, offset);
+    put32(140 + strip * 4, rows * row_bytes);
+    for (uint32_t row = 0; row < rows; ++row) {
+      for (uint32_t column = 0; column < width; ++column) {
+        const size_t pixel = static_cast<size_t>(strip * 2 + row) * width + column;
+        for (uint32_t channel = 0; channel < samples; ++channel) {
+          data[offset + row * row_bytes + column * samples + channel] =
+              static_cast<uint8_t>(pixel * 17 + channel * 73);
+        }
+      }
+    }
+  }
+  return data;
+}
+
 template <typename Runtime = core::runtime::RuntimeContext>
 Tensor DecodeWithRegisteredKernel(const unsigned char *data, size_t size,
                                   const std::string &pixel_format) {
@@ -415,6 +462,82 @@ TEST_F(ImageDecoderTest, RegistrationIsIdempotent) {
 TEST_F(ImageDecoderTest, KernelRegisteredInDispatchTable) {
   const auto &table = KernelDispatchTable();
   EXPECT_NE(table.find("ai.onnx:ImageDecoder"), table.end());
+}
+
+TEST_F(ImageDecoderTest, TiffConversionUsesOnnxLightExecutor) {
+  core::runtime::CpuExecutorRegistry registry(2);
+  for (bool grayscale : {false, true}) {
+    for (uint32_t width : {2u, 65537u}) {
+      const auto encoded = MakeStripTiff(width, grayscale);
+      for (const char *format : {"RGB", "BGR", "Grayscale"}) {
+        const size_t channels = ImageDecoder::ChannelCount(format);
+        std::vector<uint8_t> expected(width * 5 * channels);
+        for (size_t i = 0; i < width * 5; ++i) {
+          const uint8_t red = static_cast<uint8_t>(i * 17);
+          const uint8_t green = grayscale ? red : static_cast<uint8_t>(i * 17 + 73);
+          const uint8_t blue = grayscale ? red : static_cast<uint8_t>(i * 17 + 146);
+          if (channels == 1) {
+            expected[i] = static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
+          } else {
+            expected[i * 3] = std::string(format) == "RGB" ? red : blue;
+            expected[i * 3 + 1] = green;
+            expected[i * 3 + 2] = std::string(format) == "RGB" ? blue : red;
+          }
+        }
+        for (int32_t threads : {1, 2}) {
+          SCOPED_TRACE(::testing::Message()
+                       << width << " " << grayscale << " " << format << " " << threads);
+          core::runtime::CpuExecutionPolicy policy;
+          policy.num_threads = threads;
+          policy.spin_policy = core::runtime::CpuSpinPolicy::kParkImmediately;
+          auto executor = registry.Acquire(policy);
+          core::runtime::CpuExecutorScope executor_scope(executor.get());
+          core::runtime::ParallelRegionCollector collector(4);
+          core::runtime::ParallelRegionCollectorScope collector_scope(&collector);
+          const Tensor result = DecodeWithRegisteredKernel(encoded.data(), encoded.size(), format);
+          ASSERT_EQ(result.shape, (std::vector<int64_t>{5, width, static_cast<int64_t>(channels)}));
+          EXPECT_EQ(std::vector<uint8_t>(result.bytes(), result.bytes() + result.size_bytes()),
+                    expected);
+          const auto events = collector.events();
+          ASSERT_EQ(events.size(), 1u);
+          EXPECT_EQ(events[0].label, "ImageDecoder/TIFF");
+          EXPECT_EQ(events[0].executor_instance_id, executor->instance_id());
+          EXPECT_EQ(events[0].total_iterations, width * 5);
+          EXPECT_EQ(events[0].observed_threads, width == 2 ? 1 : threads);
+        }
+      }
+    }
+  }
+}
+
+TEST_F(ImageDecoderTest, SmallLegacyConversionsUseOnnxLightExecutorInline) {
+  core::runtime::CpuExecutorRegistry registry(1);
+  core::runtime::CpuExecutionPolicy policy;
+  policy.num_threads = 2;
+  policy.spin_policy = core::runtime::CpuSpinPolicy::kParkImmediately;
+  auto executor = registry.Acquire(policy);
+  core::runtime::CpuExecutorScope executor_scope(executor.get());
+  for (bool webp : {true, false}) {
+    for (const char *format : {"RGB", "BGR", "Grayscale"}) {
+      core::runtime::ParallelRegionCollector collector(4);
+      core::runtime::ParallelRegionCollectorScope collector_scope(&collector);
+      const Tensor result = DecodeWithRegisteredKernel(
+          webp ? kWebpData : kJp2Data, webp ? sizeof(kWebpData) : sizeof(kJp2Data), format);
+      ASSERT_EQ(result.shape, (std::vector<int64_t>{1, 2, ImageDecoder::ChannelCount(format)}));
+      const std::vector<uint8_t> expected =
+          std::string(format) == "RGB"   ? std::vector<uint8_t>{255, 0, 0, 0, 255, 0}
+          : std::string(format) == "BGR" ? std::vector<uint8_t>{0, 0, 255, 0, 255, 0}
+                                         : std::vector<uint8_t>{76, 150};
+      EXPECT_EQ(std::vector<uint8_t>(result.bytes(), result.bytes() + result.size_bytes()),
+                expected);
+      const auto events = collector.events();
+      ASSERT_EQ(events.size(), 1u);
+      EXPECT_EQ(events[0].label, webp ? "ImageDecoder/WebP" : "ImageDecoder/JPEG2000");
+      EXPECT_EQ(events[0].executor_instance_id, executor->instance_id());
+      EXPECT_EQ(events[0].total_iterations, 2);
+      EXPECT_EQ(events[0].observed_threads, 1);
+    }
+  }
 }
 
 TEST_F(ImageDecoderTest, DecodeBmpRgb) {
