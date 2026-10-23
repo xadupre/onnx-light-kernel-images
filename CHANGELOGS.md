@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.1.0] – Unreleased
+## [0.2.0] – Unreleased
 
 ### New Features
 
@@ -17,3 +17,4 @@ All notable changes to this project are documented in this file.
   Python wheels for Linux and Windows on x86-64 and ARM64.
 - Build against the onnx-light 0.2.0 C++ runtime
   ([#67](https://github.com/xadupre/onnx-light-kernel-images/pull/67)).
+- Pin the Python runtime dependency to `onnx-light==0.2.0`.
