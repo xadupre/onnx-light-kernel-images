@@ -149,6 +149,11 @@ target_link_libraries(my_app PRIVATE
     onnx_light_kernel_images::lib_onnx_light_kernel_images)
 ```
 
+To register only for one runtime session, pass the `RuntimeContext` used by
+that session to `onnx_light_kernel_images::RegisterImageKernels(context)` before
+its first run. This does not modify the global dispatch table or other contexts;
+subgraphs inherit the local registration.
+
 ## Python usage
 
 ```python
@@ -157,6 +162,20 @@ from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernel
 # Register the kernel once before running models.
 register_image_kernels()
 ```
+
+For session-only registration, pass the evaluator instead:
+
+```python
+from onnx_light.onnx.reference import ReferenceEvaluator
+
+session = ReferenceEvaluator(model)
+register_image_kernels(session)
+image = session.run(None, {"encoded": encoded})[0]
+```
+
+`register_image_kernels(context)` also accepts a low-level `RuntimeContext`.
+Register before the first run: already-resolved kernels are not replaced.
+Calling without an argument (or with `None`) retains global registration.
 
 Once the kernels are registered, build an ``ImageDecoder`` ONNX model and run it
 through onnx-light's ``ReferenceEvaluator``, feeding the encoded bytestream as a

@@ -403,7 +403,21 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
   list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
   find_package(nanobind CONFIG REQUIRED)
 
-  nanobind_add_module(_imgpykernels STABLE_ABI ${PY_KERNELS_SOURCES})
+  # Native RuntimeContext arguments must share the runtime's nanobind type registry.
+  execute_process(
+    COMMAND "${Python_EXECUTABLE}" -c
+        "from onnx_light import get_cpp_build_info; print(get_cpp_build_info().get('python_stable_abi', 'ON'))"
+    RESULT_VARIABLE _onnx_light_abi_status
+    OUTPUT_VARIABLE _onnx_light_stable_abi
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT _onnx_light_abi_status EQUAL 0)
+    message(FATAL_ERROR "Could not query the onnx-light Python binding ABI.")
+  endif()
+  if(_onnx_light_stable_abi STREQUAL "OFF")
+    nanobind_add_module(_imgpykernels ${PY_KERNELS_SOURCES})
+  else()
+    nanobind_add_module(_imgpykernels STABLE_ABI ${PY_KERNELS_SOURCES})
+  endif()
   target_include_directories(_imgpykernels PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}")
   target_link_libraries(_imgpykernels PRIVATE lib_onnx_light_kernel_images)

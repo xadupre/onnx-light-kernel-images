@@ -590,6 +590,38 @@ TEST_F(ImageDecoderTest, KernelRegisteredInDispatchTable) {
   EXPECT_NE(table.find("ai.onnx:ImageDecoder"), table.end());
 }
 
+TEST(ImageKernelRegistrationTest, ContextRegistrationIsLocalAndIdempotent) {
+  core::runtime::RuntimeContext local(KernelContext(core::runtime::DefaultOpset(20)));
+  core::runtime::RuntimeContext other(KernelContext(core::runtime::DefaultOpset(20)));
+  const auto before = KernelDispatchTable();
+
+  onnx_light_kernel_images::RegisterImageKernels(local);
+  onnx_light_kernel_images::RegisterImageKernels(local);
+  onnx_light_kernel_images::RegisterImageKernels(other);
+
+  ASSERT_EQ(local.custom_kernels().size(), 1u);
+  EXPECT_EQ(local.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
+  EXPECT_EQ(other.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
+  local.ClearCustomKernels();
+  EXPECT_EQ(other.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
+  ASSERT_EQ(KernelDispatchTable().size(), before.size());
+  for (const auto &[key, factory] : before) {
+    ASSERT_NE(KernelDispatchTable().find(key), KernelDispatchTable().end());
+    EXPECT_EQ(KernelDispatchTable().at(key).target_type(), factory.target_type());
+  }
+
+  other.tensors()["encoded"] = MakeEncodedTensor(kTiffPackBitsData, sizeof(kTiffPackBitsData));
+  NodeProto node;
+  node.set_op_type("ImageDecoder");
+  node.add_input("encoded");
+  node.add_output("image");
+  core::runtime::RunNode(node, other);
+  const Tensor &image = other.tensors().at("image");
+  ASSERT_EQ(image.shape, (std::vector<int64_t>{1, 2, 3}));
+  EXPECT_EQ((std::vector<uint8_t>(image.bytes(), image.bytes() + image.size_bytes())),
+            (std::vector<uint8_t>{255, 0, 0, 0, 255, 0}));
+}
+
 TEST_F(ImageDecoderTest, TiffConversionUsesOnnxLightExecutor) {
   core::runtime::CpuExecutorRegistry registry(2);
   for (bool grayscale : {false, true}) {

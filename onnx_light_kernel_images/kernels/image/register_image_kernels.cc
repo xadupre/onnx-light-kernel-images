@@ -131,4 +131,18 @@ void RegisterImageKernels() {
                    MakeKernel<TiffAwareImageDecoder>());
 }
 
+void RegisterImageKernels(RuntimeContext &context) {
+#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API
+  context.RegisterKernelFn("ai.onnx", "ImageDecoder", onnx_light::core::symbolic::Device::kCPU,
+                           MakeKernel<TiffAwareImageDecoder>());
+#else
+  context.RegisterCustomKernel("ai.onnx", "ImageDecoder",
+                               [](const NodeProto &node, RuntimeContext &rt) {
+                                 TiffAwareImageDecoder kernel(rt.kernel_ctx());
+                                 kernel.set_node(node);
+                                 kernel.Run(rt);
+                               });
+#endif
+}
+
 } // namespace onnx_light_kernel_images
