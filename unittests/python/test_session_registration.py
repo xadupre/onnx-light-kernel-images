@@ -36,6 +36,12 @@ class TestSessionRegistration(unittest.TestCase):
             ):
                 register_image_kernels(context)
 
+        class InvalidEvaluator:
+            _ctx = object()
+
+        with self.assertRaisesRegex(TypeError, "context._ctx must be a RuntimeContext"):
+            register_image_kernels(InvalidEvaluator())
+
     def test_registration_does_not_leak(self):
         # A fresh process keeps global registrations in other tests from hiding leaks.
         code = """
