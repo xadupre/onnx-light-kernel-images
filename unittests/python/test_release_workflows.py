@@ -79,12 +79,20 @@ class TestReleaseWorkflows(unittest.TestCase):
                         text=True,
                         check=False,
                     )
-                    calls = [json.loads(line) for line in log.read_text().splitlines()]
+                    calls = (
+                        [json.loads(line) for line in log.read_text().splitlines()]
+                        if log.exists()
+                        else []
+                    )
                     if state == "failure":
                         self.assertNotEqual(result.returncode, 0)
                         self.assertFalse(any(call[1] == "upload" for call in calls))
                         continue
-                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(
+                        result.returncode,
+                        0,
+                        f"stderr:\n{result.stderr}\n\nstdout:\n{result.stdout}",
+                    )
                     self.assertTrue(all(call[2] == "0.1.0" for call in calls))
                     if state == "existing":
                         self.assertFalse(any(call[1] == "create" for call in calls))
