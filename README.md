@@ -40,6 +40,8 @@ TIFF pixel conversion and WebP/JPEG2000 post-decode conversion use onnx-light's
 outside an executor scope). Images below the default 32,768-pixel threshold and
 single-thread executors run inline. Codec decompression remains serial; BMP,
 JPEG, PNG and PNM decoding is delegated to onnx-light.
+TIFF conversion processes contiguous row segments within each pixel range, retaining
+pixel-based scheduling for wide images while computing strip addresses once per segment.
 
 ## Build from source
 

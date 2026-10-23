@@ -593,7 +593,7 @@ TEST_F(ImageDecoderTest, KernelRegisteredInDispatchTable) {
 TEST_F(ImageDecoderTest, TiffConversionUsesOnnxLightExecutor) {
   core::runtime::CpuExecutorRegistry registry(2);
   for (bool grayscale : {false, true}) {
-    for (uint32_t width : {2u, 65537u}) {
+    for (uint32_t width : {2u, 65536u, 65537u}) {
       const auto encoded = MakeStripTiff(width, grayscale);
       for (const char *format : {"RGB", "BGR", "Grayscale"}) {
         const size_t channels = ImageDecoder::ChannelCount(format);
@@ -657,6 +657,7 @@ TEST_F(ImageDecoderTest, SmallLegacyConversionsUseOnnxLightExecutorInline) {
   policy.num_threads = 2;
   policy.spin_policy = core::runtime::CpuSpinPolicy::kParkImmediately;
   auto executor = registry.Acquire(policy);
+  ASSERT_EQ(executor->policy().effective_threads, 2);
   core::runtime::CpuExecutorScope executor_scope(executor.get());
   const bool webp_available = LibWebpRuntimeAvailable();
   const bool openjpeg_available = OpenJpegRuntimeAvailable();

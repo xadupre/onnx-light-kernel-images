@@ -295,33 +295,38 @@ bool TryDecodeTiff(const uint8_t *data, size_t size, const std::string &pixel_fo
   onnx_light::core::runtime::ParallelFor(
       static_cast<int64_t>(pixel_count),
       [&](int64_t begin, int64_t end) {
-        for (int64_t i = begin; i < end; ++i) {
+        for (int64_t i = begin; i < end;) {
           const size_t row = static_cast<size_t>(i) / image_width;
           const size_t column = static_cast<size_t>(i) % image_width;
+          const int64_t row_end =
+              i + std::min<int64_t>(end - i, static_cast<int64_t>(image_width - column));
           const uint8_t *src_row =
               data + strip_offsets[row / rows_per_strip] + (row % rows_per_strip) * row_bytes;
           uint8_t *dst = out_pixels.data() + static_cast<size_t>(i) * channels;
-          if (is_rgb) {
-            const uint8_t red = src_row[column * 3];
-            const uint8_t green = src_row[column * 3 + 1];
-            const uint8_t blue = src_row[column * 3 + 2];
-            if (pixel_format == "RGB") {
-              dst[0] = red;
-              dst[1] = green;
-              dst[2] = blue;
-            } else if (pixel_format == "BGR") {
-              dst[0] = blue;
-              dst[1] = green;
-              dst[2] = red;
+          const uint8_t *src = src_row + column * samples_per_pixel;
+          for (; i < row_end; ++i, src += samples_per_pixel, dst += channels) {
+            if (is_rgb) {
+              const uint8_t red = src[0];
+              const uint8_t green = src[1];
+              const uint8_t blue = src[2];
+              if (pixel_format == "RGB") {
+                dst[0] = red;
+                dst[1] = green;
+                dst[2] = blue;
+              } else if (pixel_format == "BGR") {
+                dst[0] = blue;
+                dst[1] = green;
+                dst[2] = red;
+              } else {
+                dst[0] = static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
+              }
             } else {
-              dst[0] = static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
-            }
-          } else {
-            const uint8_t value = src_row[column];
-            dst[0] = value;
-            if (channels == 3) {
-              dst[1] = value;
-              dst[2] = value;
+              const uint8_t value = src[0];
+              dst[0] = value;
+              if (channels == 3) {
+                dst[1] = value;
+                dst[2] = value;
+              }
             }
           }
         }

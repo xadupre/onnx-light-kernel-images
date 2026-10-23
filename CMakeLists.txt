@@ -142,11 +142,17 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
   get_filename_component(_onnx_light_libdir
       "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY}" DIRECTORY)
   file(GLOB _onnx_light_threads_lib
-      "${_onnx_light_libdir}/liblib_onnx_threads.*"
-      "${_onnx_light_libdir}/lib_onnx_threads.*")
+      "${_onnx_light_libdir}/liblib_onnx_threads${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      "${_onnx_light_libdir}/lib_onnx_threads${CMAKE_SHARED_LIBRARY_SUFFIX}")
   if(NOT _onnx_light_threads_lib)
     message(FATAL_ERROR
         "Could not find the onnx-light threads runtime in ${_onnx_light_libdir}.")
+  endif()
+  list(LENGTH _onnx_light_threads_lib _onnx_light_threads_count)
+  if(NOT _onnx_light_threads_count EQUAL 1)
+    message(FATAL_ERROR
+        "Multiple onnx-light threads runtimes found in ${_onnx_light_libdir}: "
+        "${_onnx_light_threads_lib}. Keep only the matching shared runtime.")
   endif()
   list(GET _onnx_light_threads_lib 0 _onnx_light_threads_lib)
   add_library(onnx_threads::lib_onnx_threads
@@ -161,7 +167,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
       IMPORTED_LOCATION "${_onnx_light_threads_lib}"
       INTERFACE_INCLUDE_DIRECTORIES
           "${_onnx_light_threads_include_dir}")
-  set_property(TARGET onnx_proto::lib_onnx_proto APPEND PROPERTY
+  set_property(TARGET onnx_light::lib_onnx_core APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES onnx_threads::lib_onnx_threads)
   if(WIN32)
     if(NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_THREADS_IMPLIB)
