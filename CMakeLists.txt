@@ -46,6 +46,12 @@ See cmake/Hardening.cmake and \
 https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html"
     OFF)
 
+if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON AND
+   NOT ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR AND
+   NOT DEFINED ONNX_LIGHT_ROOT AND NOT CMAKE_CROSSCOMPILING)
+  include(cmake/OnnxLightPython.cmake)
+endif()
+
 if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR AND
    ONNX_LIGHT_KERNEL_IMAGES_INSTALL)
   message(STATUS
@@ -344,7 +350,7 @@ if(UNIX AND NOT APPLE AND
       "LINKER:--no-as-needed")
   if(_img_lib_type STREQUAL "SHARED")
     set_target_properties(lib_onnx_light_kernel_images PROPERTIES
-        INSTALL_RPATH "$ORIGIN;$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>"
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/../../onnx_light/onnx_py;$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>"
         BUILD_RPATH "$ORIGIN;$<TARGET_FILE_DIR:onnx_light::lib_onnx_core>"
     )
   endif()
@@ -376,9 +382,9 @@ endif()
 # ---------------------------------------------------------------------------
 if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
   if(CMAKE_CROSSCOMPILING)
-    find_package(Python3 3.10 REQUIRED COMPONENTS Development.Module
+    find_package(Python3 3.12 REQUIRED COMPONENTS Development.Module
         OPTIONAL_COMPONENTS Development.SABIModule)
-    find_package(Python 3.10 REQUIRED COMPONENTS Interpreter)
+    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)
     if(NOT TARGET Python::Module)
       add_library(Python::Module ALIAS Python3::Module)
     endif()
@@ -386,7 +392,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
       add_library(Python::SABIModule ALIAS Python3::SABIModule)
     endif()
   else()
-    find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module
+    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.Module
         OPTIONAL_COMPONENTS Development.SABIModule)
   endif()
 

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Check release metadata and the matching onnx-light runtime dependency."""
 
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -26,13 +27,29 @@ class TestPackageMetadata(unittest.TestCase):
                 self.assertIn(declaration, (_REPO_ROOT / filename).read_text())
 
     def test_onnx_light_dependency(self):
-        self.assertIn(
-            '"onnx-light==0.2.0"',
-            (_REPO_ROOT / "pyproject.toml").read_text(),
-        )
+        metadata = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
+        self.assertIn("onnx-light==0.2.0", metadata["project"]["dependencies"])
+        self.assertIn("onnx-light==0.2.0", metadata["build-system"]["requires"])
         self.assertIn(
             'pip install "onnx-light==0.2.0"',
             (_REPO_ROOT / ".github" / "workflows" / "docs.yml").read_text(),
+        )
+
+    def test_release_wheel_discovery(self):
+        for filename in ("ci_core.yml", "docs.yml", "build_release_wheel.yml"):
+            with self.subTest(workflow=filename):
+                self.assertIn(
+                    "  PIP_FIND_LINKS: "
+                    "https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0",
+                    (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
+                )
+
+    def test_supported_python_versions(self):
+        project = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"]
+        self.assertEqual(project["requires-python"], ">=3.12")
+        self.assertIn(
+            'python-version: ["3.12", "3.13"]',
+            (_REPO_ROOT / ".github" / "workflows" / "build_release_wheel.yml").read_text(),
         )
 
 

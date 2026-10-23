@@ -15,6 +15,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
+
 # The Python extension links the prebuilt onnx-light C++ static libraries, which
 # onnx-light publishes only for Linux and Windows (macOS has no archive and its
 # CMake configure step fails on purpose). Those static libraries are built on
@@ -34,7 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         artifact_suffix: [linux-x86_64, linux-aarch64, windows-AMD64, windows-ARM64]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13"]
         include:
           - artifact_suffix: linux-x86_64
             runs-on: ubuntu-24.04

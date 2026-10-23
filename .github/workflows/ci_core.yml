@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
+
 jobs:
   core_tests:
     name: core (${{ matrix.os }}, py${{ matrix.python-version }})
@@ -56,6 +59,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libopenjp2-7 libwebp7
+
+      - name: Install onnx-light Python runtime
+        shell: bash
+        run: |
+          pip install "onnx-light==0.2.0"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from onnx_light import get_cpp_build_info
+
+          variable = "PATH" if os.name == "nt" else "LD_LIBRARY_PATH"
+          library_dir = Path(get_cpp_build_info()["library_dir"])
+          paths = [str(library_dir), str(library_dir.parent.parent / "onnx_light.libs")]
+          paths.append(os.environ.get(variable, ""))
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"{variable}={os.pathsep.join(paths)}\n")
+          PY
 
       # sccache caches compiled objects in the GitHub Actions cache so repeated
       # runs that do not touch C++ sources are near-instant.

@@ -48,7 +48,7 @@ pixel-based scheduling for wide images while computing strip addresses once per 
 Prebuilt C++ archives and Python wheels are available on the
 [GitHub Releases page](https://github.com/xadupre/onnx-light-kernel-images/releases).
 Pushing a new tag builds and attaches binaries for Linux and Windows
-(x86-64 and ARM64); wheels target Python 3.10–3.13. Release notes are generated
+(x86-64 and ARM64); wheels target Python 3.12–3.13. Release notes are generated
 from the changes since the previous release. See [CHANGELOGS.md](CHANGELOGS.md)
 for the project changelog.
 
@@ -56,14 +56,19 @@ for the project changelog.
 
 - C++20 compiler
 - CMake ≥ 3.15
-- Python ≥ 3.10
+- Python ≥ 3.12
 - [nanobind](https://github.com/wjakob/nanobind) ≥ 1.3.2
 
 ### Python wheel (recommended)
 
 ```bash
-pip install .
+pip install --find-links https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0 .
 ```
+
+The required `onnx-light==0.2.0` wheels are hosted on GitHub Releases, not PyPI.
+For other pip-based install commands below, set `PIP_FIND_LINKS` to the same URL.
+Python builds link to that runtime's shared libraries so kernel registration
+updates the same dispatch table used by `ReferenceEvaluator`.
 
 ### Pixi environment
 
