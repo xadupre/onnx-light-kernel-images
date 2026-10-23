@@ -1,0 +1,19 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+## [0.1.0] – Unreleased
+
+### New Features
+
+- ONNX `ImageDecoder` kernel for onnx-light, supporting BMP, TIFF, JPEG,
+  JPEG2000, PNG, WebP, and PNM images.
+- C++ and Python APIs for registering the image kernels.
+
+### Documentation & CI
+
+- Documentation with a supported-kernels reference and image-format examples.
+- Tag-triggered GitHub Releases with generated release notes, C++ archives, and
+  Python wheels for Linux and Windows on x86-64 and ARM64.
+- Build against the onnx-light 0.2.0 C++ runtime
+  ([#67](https://github.com/xadupre/onnx-light-kernel-images/pull/67)).
