@@ -148,6 +148,7 @@ def _onnx_light_source_build_info():
             "proto_import_library": "lib_onnx_proto.lib",
             "kernels_import_library": "lib_onnx_kernels.lib",
             "backend_test_import_library": "lib_onnx_backend_test.lib",
+            "threads_import_library": "lib_onnx_threads.lib",
         }
         for key, filename in components.items():
             matches = sorted(root.glob(f"**/{filename}"))
@@ -188,6 +189,10 @@ def _add_onnx_light_source_defines(cmake_args, build_info=None):
         (
             "backend_test_import_library",
             "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_BACKEND_TEST_IMPLIB",
+        ),
+        (
+            "threads_import_library",
+            "ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_THREADS_IMPLIB",
         ),
     ):
         if key in info:

@@ -7,6 +7,7 @@
 
 #include "onnx_light_kernel_images/kernels/image/legacy_image_codecs.h"
 #include "onnx_light_kernel_images/tiff_compression.h"
+#include "onnx_threads/parallel_for.h"
 
 #if __has_include("onnx_core/runtime/memory/temporary_buffer.h")
 #include "onnx_core/runtime/memory/temporary_buffer.h"
@@ -258,21 +259,24 @@ bool TryDecodeTiff(const uint8_t *data, size_t size, const std::string &pixel_fo
 
   const int64_t channels = ImageDecoder::ChannelCount(pixel_format);
   const uint64_t row_bytes = static_cast<uint64_t>(image_width) * samples_per_pixel;
-  uint32_t covered_rows = 0;
-  for (size_t strip = 0; strip < strip_offsets.size() && covered_rows < image_length; ++strip) {
+  const uint64_t expected_strip_count =
+      (static_cast<uint64_t>(image_length) + rows_per_strip - 1) / rows_per_strip;
+  if (strip_offsets.size() != expected_strip_count) {
+    return false;
+  }
+  for (size_t strip = 0; strip < strip_offsets.size(); ++strip) {
     const uint32_t strip_offset = strip_offsets[strip];
     const uint32_t strip_size = strip_byte_counts[strip];
     if (static_cast<uint64_t>(strip_offset) + strip_size > size) {
       return false;
     }
-    const uint32_t rows = std::min<uint32_t>(rows_per_strip, image_length - covered_rows);
-    if (static_cast<uint64_t>(rows) * row_bytes > strip_size) {
+    const uint64_t first_row = static_cast<uint64_t>(strip) * rows_per_strip;
+    const uint32_t rows =
+        std::min<uint32_t>(rows_per_strip, image_length - static_cast<uint32_t>(first_row));
+    if (row_bytes > std::numeric_limits<uint64_t>::max() / rows ||
+        static_cast<uint64_t>(rows) * row_bytes > strip_size) {
       return false;
     }
-    covered_rows += rows;
-  }
-  if (covered_rows != image_length) {
-    return false;
   }
 
   const uint64_t pixel_count64 = static_cast<uint64_t>(image_length) * image_width;
@@ -280,65 +284,54 @@ bool TryDecodeTiff(const uint8_t *data, size_t size, const std::string &pixel_fo
     return false;
   }
   const uint64_t output_size64 = pixel_count64 * static_cast<uint64_t>(channels);
-  if (pixel_count64 > std::numeric_limits<size_t>::max() / static_cast<size_t>(channels) ||
+  if (pixel_count64 > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
+      pixel_count64 > std::numeric_limits<size_t>::max() / static_cast<size_t>(channels) ||
       output_size64 > out_pixels.max_size()) {
     return false;
   }
   const size_t pixel_count = static_cast<size_t>(pixel_count64);
   out_pixels.assign(pixel_count * static_cast<size_t>(channels), 0);
 
-  uint32_t next_row = 0;
-  for (size_t strip = 0; strip < strip_offsets.size(); ++strip) {
-    const uint32_t strip_offset = strip_offsets[strip];
-    const uint32_t strip_size = strip_byte_counts[strip];
-    if (static_cast<uint64_t>(strip_offset) + strip_size > size) {
-      return false;
-    }
-    const uint32_t rows = std::min<uint32_t>(rows_per_strip, image_length - next_row);
-    if (static_cast<uint64_t>(rows) * row_bytes > strip_size) {
-      return false;
-    }
-    const uint8_t *src = data + strip_offset;
-    for (uint32_t row = 0; row < rows; ++row) {
-      const uint8_t *src_row = src + static_cast<size_t>(row) * row_bytes;
-      uint8_t *dst_row =
-          out_pixels.data() + static_cast<size_t>(next_row + row) * image_width * channels;
-      for (uint32_t column = 0; column < image_width; ++column) {
-        uint8_t *dst = dst_row + static_cast<size_t>(column) * channels;
-        if (is_rgb) {
-          const uint8_t red = src_row[column * 3];
-          const uint8_t green = src_row[column * 3 + 1];
-          const uint8_t blue = src_row[column * 3 + 2];
-          if (pixel_format == "RGB") {
-            dst[0] = red;
-            dst[1] = green;
-            dst[2] = blue;
-          } else if (pixel_format == "BGR") {
-            dst[0] = blue;
-            dst[1] = green;
-            dst[2] = red;
-          } else {
-            dst[0] = static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
-          }
-        } else {
-          const uint8_t value = src_row[column];
-          dst[0] = value;
-          if (channels == 3) {
-            dst[1] = value;
-            dst[2] = value;
+  onnx_light::core::runtime::ParallelFor(
+      static_cast<int64_t>(pixel_count),
+      [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end;) {
+          const size_t row = static_cast<size_t>(i) / image_width;
+          const size_t column = static_cast<size_t>(i) % image_width;
+          const int64_t row_end =
+              i + std::min<int64_t>(end - i, static_cast<int64_t>(image_width - column));
+          const uint8_t *src_row =
+              data + strip_offsets[row / rows_per_strip] + (row % rows_per_strip) * row_bytes;
+          uint8_t *dst = out_pixels.data() + static_cast<size_t>(i) * channels;
+          const uint8_t *src = src_row + column * samples_per_pixel;
+          for (; i < row_end; ++i, src += samples_per_pixel, dst += channels) {
+            if (is_rgb) {
+              const uint8_t red = src[0];
+              const uint8_t green = src[1];
+              const uint8_t blue = src[2];
+              if (pixel_format == "RGB") {
+                dst[0] = red;
+                dst[1] = green;
+                dst[2] = blue;
+              } else if (pixel_format == "BGR") {
+                dst[0] = blue;
+                dst[1] = green;
+                dst[2] = red;
+              } else {
+                dst[0] = static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
+              }
+            } else {
+              const uint8_t value = src[0];
+              dst[0] = value;
+              if (channels == 3) {
+                dst[1] = value;
+                dst[2] = value;
+              }
+            }
           }
         }
-      }
-    }
-    next_row += rows;
-    if (next_row >= image_length) {
-      break;
-    }
-  }
-
-  if (next_row != image_length) {
-    return false;
-  }
+      },
+      "ImageDecoder/TIFF");
   out_height = image_length;
   out_width = image_width;
   return true;
@@ -415,7 +408,8 @@ bool TryDecodeWebp(const uint8_t *data, size_t size, const std::string &pixel_fo
 
   const int64_t channels = ImageDecoder::ChannelCount(pixel_format);
   const uint64_t pixel_count64 = static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
-  if (pixel_count64 > std::numeric_limits<size_t>::max() / 3u ||
+  if (pixel_count64 > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
+      pixel_count64 > std::numeric_limits<size_t>::max() / 3u ||
       pixel_count64 > std::numeric_limits<size_t>::max() / static_cast<size_t>(channels)) {
     return false;
   }
@@ -432,22 +426,28 @@ bool TryDecodeWebp(const uint8_t *data, size_t size, const std::string &pixel_fo
   }
 
   out_pixels.resize(pixel_count * static_cast<size_t>(channels));
-  for (size_t i = 0; i < pixel_count; ++i) {
-    const uint8_t red = rgb.data()[i * 3u];
-    const uint8_t green = rgb.data()[i * 3u + 1u];
-    const uint8_t blue = rgb.data()[i * 3u + 2u];
-    if (pixel_format == "RGB") {
-      out_pixels[i * 3u] = red;
-      out_pixels[i * 3u + 1u] = green;
-      out_pixels[i * 3u + 2u] = blue;
-    } else if (pixel_format == "BGR") {
-      out_pixels[i * 3u] = blue;
-      out_pixels[i * 3u + 1u] = green;
-      out_pixels[i * 3u + 2u] = red;
-    } else {
-      out_pixels[i] = static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
-    }
-  }
+  onnx_light::core::runtime::ParallelFor(
+      static_cast<int64_t>(pixel_count),
+      [&](int64_t begin, int64_t end) {
+        for (int64_t i = begin; i < end; ++i) {
+          const uint8_t red = rgb.data()[i * 3u];
+          const uint8_t green = rgb.data()[i * 3u + 1u];
+          const uint8_t blue = rgb.data()[i * 3u + 2u];
+          if (pixel_format == "RGB") {
+            out_pixels[i * 3u] = red;
+            out_pixels[i * 3u + 1u] = green;
+            out_pixels[i * 3u + 2u] = blue;
+          } else if (pixel_format == "BGR") {
+            out_pixels[i * 3u] = blue;
+            out_pixels[i * 3u + 1u] = green;
+            out_pixels[i * 3u + 2u] = red;
+          } else {
+            out_pixels[i] =
+                static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
+          }
+        }
+      },
+      "ImageDecoder/WebP");
 
   out_height = height;
   out_width = width;
@@ -693,6 +693,7 @@ bool TryDecodeJpeg2000(const uint8_t *data, size_t size, const std::string &pixe
       }
       const uint64_t pixel_count64 = static_cast<uint64_t>(width) * height;
       if (geometry_ok &&
+          pixel_count64 <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) &&
           pixel_count64 <= std::numeric_limits<size_t>::max() / static_cast<size_t>(channels)) {
         const size_t pixel_count = static_cast<size_t>(pixel_count64);
         const auto sample = [components](uint32_t component, size_t index) -> uint8_t {
@@ -711,25 +712,30 @@ bool TryDecodeJpeg2000(const uint8_t *data, size_t size, const std::string &pixe
         };
 
         out_pixels.resize(pixel_count * static_cast<size_t>(channels));
-        for (size_t i = 0; i < pixel_count; ++i) {
-          if (pixel_format == "RGB") {
-            out_pixels[i * 3u] = sample(0, i);
-            out_pixels[i * 3u + 1u] = sample(1, i);
-            out_pixels[i * 3u + 2u] = sample(2, i);
-          } else if (pixel_format == "BGR") {
-            out_pixels[i * 3u] = sample(2, i);
-            out_pixels[i * 3u + 1u] = sample(1, i);
-            out_pixels[i * 3u + 2u] = sample(0, i);
-          } else if (component_count >= 3) {
-            const uint8_t red = sample(0, i);
-            const uint8_t green = sample(1, i);
-            const uint8_t blue = sample(2, i);
-            out_pixels[i] =
-                static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
-          } else {
-            out_pixels[i] = sample(0, i);
-          }
-        }
+        onnx_light::core::runtime::ParallelFor(
+            static_cast<int64_t>(pixel_count),
+            [&](int64_t begin, int64_t end) {
+              for (int64_t i = begin; i < end; ++i) {
+                if (pixel_format == "RGB") {
+                  out_pixels[i * 3u] = sample(0, i);
+                  out_pixels[i * 3u + 1u] = sample(1, i);
+                  out_pixels[i * 3u + 2u] = sample(2, i);
+                } else if (pixel_format == "BGR") {
+                  out_pixels[i * 3u] = sample(2, i);
+                  out_pixels[i * 3u + 1u] = sample(1, i);
+                  out_pixels[i * 3u + 2u] = sample(0, i);
+                } else if (component_count >= 3) {
+                  const uint8_t red = sample(0, i);
+                  const uint8_t green = sample(1, i);
+                  const uint8_t blue = sample(2, i);
+                  out_pixels[i] =
+                      static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
+                } else {
+                  out_pixels[i] = sample(0, i);
+                }
+              }
+            },
+            "ImageDecoder/JPEG2000");
         out_height = height;
         out_width = width;
         ok = true;

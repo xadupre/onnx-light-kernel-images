@@ -35,6 +35,14 @@ JPEG2000 and WebP are decoded through the OpenJPEG (`libopenjp2`) and
 corresponding library is not available the decoder returns an empty matrix, as
 described by the ONNX `ImageDecoder` schema.
 
+TIFF pixel conversion and WebP/JPEG2000 post-decode conversion use onnx-light's
+`ParallelFor`, reusing the active CPU executor (or its shared global thread pool
+outside an executor scope). Images below the default 32,768-pixel threshold and
+single-thread executors run inline. Codec decompression remains serial; BMP,
+JPEG, PNG and PNM decoding is delegated to onnx-light.
+TIFF conversion processes contiguous row segments within each pixel range, retaining
+pixel-based scheduling for wide images while computing strip addresses once per segment.
+
 ## Build from source
 
 Prebuilt C++ archives and Python wheels are available on the
@@ -85,6 +93,8 @@ python setup.py build_ext --inplace --cpp-tests --onnx-light-source
 `--onnx-light-source` rejects mixed installations: the imported Python package,
 headers, extension, and shared C++ libraries must all come from the same
 onnx-light checkout.
+Header discovery supports both the checkout's separate proto/helper include
+directories and the header layout shipped inside an installed Python package.
 
 ### Pure CMake (C++ only)
 
