@@ -518,7 +518,12 @@ TEST_F(ImageDecoderTest, SmallLegacyConversionsUseOnnxLightExecutorInline) {
   policy.spin_policy = core::runtime::CpuSpinPolicy::kParkImmediately;
   auto executor = registry.Acquire(policy);
   core::runtime::CpuExecutorScope executor_scope(executor.get());
+  const bool webp_available = LibWebpRuntimeAvailable();
+  const bool openjpeg_available = OpenJpegRuntimeAvailable();
   for (bool webp : {true, false}) {
+    if (webp ? !webp_available : !openjpeg_available) {
+      continue;
+    }
     for (const char *format : {"RGB", "BGR", "Grayscale"}) {
       core::runtime::ParallelRegionCollector collector(4);
       core::runtime::ParallelRegionCollectorScope collector_scope(&collector);

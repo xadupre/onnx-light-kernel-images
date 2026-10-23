@@ -140,10 +140,16 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
   list(GET _onnx_light_threads_lib 0 _onnx_light_threads_lib)
   add_library(onnx_threads::lib_onnx_threads
       ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
+  set(_onnx_light_threads_include_dir
+      "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_threads/include")
+  if(NOT IS_DIRECTORY "${_onnx_light_threads_include_dir}")
+    set(_onnx_light_threads_include_dir
+        "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light")
+  endif()
   set_target_properties(onnx_threads::lib_onnx_threads PROPERTIES
       IMPORTED_LOCATION "${_onnx_light_threads_lib}"
       INTERFACE_INCLUDE_DIRECTORIES
-          "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_threads/include")
+          "${_onnx_light_threads_include_dir}")
   set_property(TARGET onnx_proto::lib_onnx_proto APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES onnx_threads::lib_onnx_threads)
   if(WIN32)
