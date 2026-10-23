@@ -471,6 +471,7 @@ TEST_F(ImageDecoderTest, TiffConversionUsesOnnxLightExecutor) {
       const auto encoded = MakeStripTiff(width, grayscale);
       for (const char *format : {"RGB", "BGR", "Grayscale"}) {
         const size_t channels = ImageDecoder::ChannelCount(format);
+        const bool is_rgb = std::string(format) == "RGB";
         std::vector<uint8_t> expected(width * 5 * channels);
         for (size_t i = 0; i < width * 5; ++i) {
           const uint8_t red = static_cast<uint8_t>(i * 17);
@@ -479,9 +480,9 @@ TEST_F(ImageDecoderTest, TiffConversionUsesOnnxLightExecutor) {
           if (channels == 1) {
             expected[i] = static_cast<uint8_t>((299 * red + 587 * green + 114 * blue + 500) / 1000);
           } else {
-            expected[i * 3] = std::string(format) == "RGB" ? red : blue;
+            expected[i * 3] = is_rgb ? red : blue;
             expected[i * 3 + 1] = green;
-            expected[i * 3 + 2] = std::string(format) == "RGB" ? blue : red;
+            expected[i * 3 + 2] = is_rgb ? blue : red;
           }
         }
         for (int32_t threads : {1, 2}) {

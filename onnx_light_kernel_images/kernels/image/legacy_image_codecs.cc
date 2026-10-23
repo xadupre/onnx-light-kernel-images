@@ -259,21 +259,24 @@ bool TryDecodeTiff(const uint8_t *data, size_t size, const std::string &pixel_fo
 
   const int64_t channels = ImageDecoder::ChannelCount(pixel_format);
   const uint64_t row_bytes = static_cast<uint64_t>(image_width) * samples_per_pixel;
-  uint32_t covered_rows = 0;
-  for (size_t strip = 0; strip < strip_offsets.size() && covered_rows < image_length; ++strip) {
+  const uint64_t expected_strip_count =
+      (static_cast<uint64_t>(image_length) + rows_per_strip - 1) / rows_per_strip;
+  if (strip_offsets.size() != expected_strip_count) {
+    return false;
+  }
+  for (size_t strip = 0; strip < strip_offsets.size(); ++strip) {
     const uint32_t strip_offset = strip_offsets[strip];
     const uint32_t strip_size = strip_byte_counts[strip];
     if (static_cast<uint64_t>(strip_offset) + strip_size > size) {
       return false;
     }
-    const uint32_t rows = std::min<uint32_t>(rows_per_strip, image_length - covered_rows);
-    if (static_cast<uint64_t>(rows) * row_bytes > strip_size) {
+    const uint64_t first_row = static_cast<uint64_t>(strip) * rows_per_strip;
+    const uint32_t rows =
+        std::min<uint32_t>(rows_per_strip, image_length - static_cast<uint32_t>(first_row));
+    if (row_bytes > std::numeric_limits<uint64_t>::max() / rows ||
+        static_cast<uint64_t>(rows) * row_bytes > strip_size) {
       return false;
     }
-    covered_rows += rows;
-  }
-  if (covered_rows != image_length) {
-    return false;
   }
 
   const uint64_t pixel_count64 = static_cast<uint64_t>(image_length) * image_width;
