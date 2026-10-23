@@ -16,6 +16,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS "Build C++ unit tests." OFF)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON "Build Python extension." ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_INSTALL "Install the C++ library and headers." ON)
+set(ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI "" CACHE STRING
+    "Target onnx-light Python binding ABI for cross-compilation (ON or OFF).")
+set_property(CACHE ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI PROPERTY STRINGS ON OFF)
 set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR "" CACHE PATH
     "Path to a local onnx-light source tree whose headers match the already-built Python runtime.")
 set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY "" CACHE FILEPATH
@@ -404,14 +407,23 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
   find_package(nanobind CONFIG REQUIRED)
 
   # Native RuntimeContext arguments must share the runtime's nanobind type registry.
-  execute_process(
-    COMMAND "${Python_EXECUTABLE}" -c
-        "from onnx_light import get_cpp_build_info; print(get_cpp_build_info().get('python_stable_abi', 'ON'))"
-    RESULT_VARIABLE _onnx_light_abi_status
-    OUTPUT_VARIABLE _onnx_light_stable_abi
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if(NOT _onnx_light_abi_status EQUAL 0)
-    message(FATAL_ERROR "Could not query the onnx-light Python binding ABI.")
+  if(CMAKE_CROSSCOMPILING)
+    if(NOT ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI STREQUAL "ON" AND
+       NOT ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI STREQUAL "OFF")
+      message(FATAL_ERROR
+          "Set ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI to ON or OFF when cross-compiling.")
+    endif()
+    set(_onnx_light_stable_abi "${ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI}")
+  else()
+    execute_process(
+      COMMAND "${Python_EXECUTABLE}" -c
+          "from onnx_light import get_cpp_build_info; print(get_cpp_build_info().get('python_stable_abi', 'ON'))"
+      RESULT_VARIABLE _onnx_light_abi_status
+      OUTPUT_VARIABLE _onnx_light_stable_abi
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _onnx_light_abi_status EQUAL 0)
+      message(FATAL_ERROR "Could not query the onnx-light Python binding ABI.")
+    endif()
   endif()
   if(_onnx_light_stable_abi STREQUAL "OFF")
     nanobind_add_module(_imgpykernels ${PY_KERNELS_SOURCES})
