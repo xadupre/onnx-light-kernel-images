@@ -37,6 +37,13 @@ described by the ONNX `ImageDecoder` schema.
 
 ## Build from source
 
+Prebuilt C++ archives and Python wheels are available on the
+[GitHub Releases page](https://github.com/xadupre/onnx-light-kernel-images/releases).
+Pushing a new tag builds and attaches binaries for Linux and Windows
+(x86-64 and ARM64); wheels target Python 3.10–3.13. Release notes are generated
+from the changes since the previous release. See [CHANGELOGS.md](CHANGELOGS.md)
+for the project changelog.
+
 ### Prerequisites
 
 - C++20 compiler
