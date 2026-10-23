@@ -84,6 +84,8 @@ python setup.py build_ext --inplace --cpp-tests --onnx-light-source
 `--onnx-light-source` rejects mixed installations: the imported Python package,
 headers, extension, and shared C++ libraries must all come from the same
 onnx-light checkout.
+Header discovery supports both the checkout's separate proto/helper include
+directories and the header layout shipped inside an installed Python package.
 
 ### Pure CMake (C++ only)
 

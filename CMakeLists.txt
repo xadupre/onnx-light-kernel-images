@@ -110,10 +110,21 @@ if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR)
       IMPORTED_LOCATION "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_PROTO_LIBRARY}")
   add_library(onnx_light::lib_onnx_core
       ${_onnx_light_imported_library_type} IMPORTED GLOBAL)
+  set(_onnx_light_include_dirs
+      "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light"
+      "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_helpers/include"
+      "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_proto")
+  if(EXISTS "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_proto/include/onnx_proto/onnx.h")
+    set(_onnx_light_include_dirs
+        "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light"
+        "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_proto/helpers/include"
+        "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_proto/include"
+        "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_proto/include/onnx_proto")
+  endif()
   set_target_properties(onnx_light::lib_onnx_core PROPERTIES
       IMPORTED_LOCATION "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES
-          "${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light;${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_helpers/include;${ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR}/onnx_light/onnx_proto"
+          "${_onnx_light_include_dirs}"
       INTERFACE_LINK_LIBRARIES onnx_proto::lib_onnx_proto)
 
   if(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_IMPLIB)
