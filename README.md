@@ -177,7 +177,8 @@ image = session.run(None, {"encoded": encoded})[0]
 Register before the first run: already-resolved kernels are not replaced.
 Repeated calls refresh the local registration for future kernel resolutions,
 including replacing an existing local `ImageDecoder` registration.
-Calling without an argument (or with `None`) retains global registration.
+Calling without an argument (or with `None`) registers globally (idempotently),
+updating the global dispatch table.
 
 Python builds detect the binding ABI from onnx-light's `get_cpp_build_info()`.
 If that runtime does not report `python_stable_abi`, configuration fails rather
