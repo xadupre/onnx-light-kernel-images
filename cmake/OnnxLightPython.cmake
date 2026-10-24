@@ -9,7 +9,7 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 if(NOT _onnx_light_info_status EQUAL 0)
-  message(FATAL_ERROR "Install onnx-light==0.2.0 before building the Python extension.")
+  message(FATAL_ERROR "Install onnx-light==0.2.1 before building the Python extension.")
 endif()
 list(GET _onnx_light_info 0 _onnx_light_include)
 list(GET _onnx_light_info 1 ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY)

@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.1
 
 jobs:
   core_tests:
@@ -63,7 +63,7 @@ jobs:
       - name: Install onnx-light Python runtime
         shell: bash
         run: |
-          pip install "onnx-light==0.2.0"
+          pip install "onnx-light==0.2.1"
           python - <<'PY'
           import os
           from pathlib import Path
