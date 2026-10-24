@@ -66,6 +66,8 @@ pip install --find-links https://github.com/xadupre/onnx-light/releases/expanded
 ```
 
 The required `onnx-light==0.2.0` wheels are hosted on GitHub Releases, not PyPI.
+Only the onnx-light 0.2.0 runtime API is supported; older API compatibility paths
+are not provided.
 For other pip-based install commands below, set `PIP_FIND_LINKS` to the same URL.
 Python builds link to that runtime's shared libraries so kernel registration
 updates the same dispatch table used by `ReferenceEvaluator`.
@@ -149,6 +151,11 @@ target_link_libraries(my_app PRIVATE
     onnx_light_kernel_images::lib_onnx_light_kernel_images)
 ```
 
+To register only for one runtime session, pass the `RuntimeContext` used by
+that session to `onnx_light_kernel_images::RegisterImageKernels(context)` before
+its first run. This does not modify the global dispatch table or other contexts;
+subgraphs inherit the local registration.
+
 ## Python usage
 
 ```python
@@ -157,6 +164,29 @@ from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernel
 # Register the kernel once before running models.
 register_image_kernels()
 ```
+
+For session-only registration, pass the evaluator instead:
+
+```python
+from onnx_light.onnx.reference import ReferenceEvaluator
+
+session = ReferenceEvaluator(model)
+register_image_kernels(session)
+image = session.run(None, {"encoded": encoded})[0]
+```
+
+`register_image_kernels(context)` also accepts a low-level `RuntimeContext`.
+Register before the first run: already-resolved kernels are not replaced.
+Repeated calls replace the local `ImageDecoder` registration used for future
+kernel resolutions. Kernel instances already resolved by existing nodes remain
+unchanged.
+Calling without an argument (or with `None`) registers globally (idempotently),
+updating the global dispatch table.
+
+Python builds detect the binding ABI from onnx-light's `get_cpp_build_info()`.
+If that runtime does not report `python_stable_abi`, configuration fails rather
+than guessing. Set `-DONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI=ON` or `OFF`
+to match the target runtime explicitly; this is required when cross-compiling.
 
 Once the kernels are registered, build an ``ImageDecoder`` ONNX model and run it
 through onnx-light's ``ReferenceEvaluator``, feeding the encoded bytestream as a

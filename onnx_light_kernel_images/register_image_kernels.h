@@ -23,6 +23,10 @@
  * @endcode
  */
 
+namespace onnx_light::core::runtime {
+class RuntimeContext;
+}
+
 namespace onnx_light_kernel_images {
 
 /**
@@ -44,5 +48,13 @@ namespace onnx_light_kernel_images {
  * Idempotent: calling this function more than once is safe and cheap.
  */
 void RegisterImageKernels();
+
+/**
+ * Registers the ImageDecoder kernel only on @p context, without changing the
+ * global dispatch table or other contexts. Subgraphs inherit this registration.
+ * Call before the session first resolves its kernels; already-resolved kernels
+ * are not replaced. Repeated registration on the same context is safe.
+ */
+void RegisterImageKernels(onnx_light::core::runtime::RuntimeContext &context);
 
 } // namespace onnx_light_kernel_images

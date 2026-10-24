@@ -7,22 +7,14 @@
 #include "onnx_light_kernel_images/tiff_compression.h"
 
 #include "onnx.h"
-#include "onnx_core/compute/raw_buffer_allocator.h"
-#if __has_include("onnx_core/runtime/kernels/kernel_context.h")
-#define ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API 1
 #include "onnx_core/backend_test/expect.h"
 #include "onnx_core/backend_test/test_case.h"
+#include "onnx_core/compute/raw_buffer_allocator.h"
 #include "onnx_core/runtime/kernels/kernel_context.h"
 #include "onnx_core/runtime/kernels/kernel_dispatch_table.h"
 #include "onnx_core/runtime/kernels/run_nodes.h"
 #include "onnx_core/runtime/kernels/tensor_compare.h"
 #include "onnx_core/runtime/memory/simple_tensor.h"
-#else
-#include "onnx_core/runtime/kernel_context.h"
-#include "onnx_core/runtime/kernel_dispatch_table.h"
-#include "onnx_core/runtime/run_nodes.h"
-#include "onnx_core/runtime/simple_tensor.h"
-#endif
 #include "onnx_core/runtime/runtime_context.h"
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
 #include "onnx_threads/cpu_executor.h"
@@ -50,7 +42,6 @@ using onnx_kernels::kernel::KernelContext;
 
 namespace {
 
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
 using core::backend_test::CollectTestCases;
 using core::backend_test::DataSet;
 using core::backend_test::TestCase;
@@ -77,7 +68,6 @@ public:
 private:
   TestCase &test_case_;
 };
-#endif
 
 // Minimal 2x2 24-bit uncompressed BMP (BI_RGB, BITMAPINFOHEADER).
 // Pixel layout (bottom-up): row0=[Red, Green], row1=[Blue, White].
@@ -384,16 +374,8 @@ bool LibWebpRuntimeAvailable() {
 }
 
 Tensor MakeEncodedTensor(const unsigned char *data, size_t size) {
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
   return Tensor::FromUint8("", {static_cast<int64_t>(size)},
                            std::vector<uint8_t>(data, data + size));
-#else
-  Tensor t;
-  t.data_type = static_cast<int32_t>(DataType::UINT8);
-  t.shape = {static_cast<int64_t>(size)};
-  t.data.assign(data, data + size);
-  return t;
-#endif
 }
 
 // Three strips in reverse storage order, with a partial final strip.
@@ -462,7 +444,6 @@ Tensor DecodeWithRegisteredKernel(const unsigned char *data, size_t size,
   return rt.tensors().at("image");
 }
 
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
 template <typename Runtime = core::runtime::RuntimeContext>
 std::vector<TestCase> CollectLocalImageDecoderCases(core::backend_test::TestMode mode) {
   struct Image {
@@ -523,7 +504,6 @@ public:
   static inline size_t constructed = 0;
   static inline size_t alive = 0;
 };
-#endif
 
 } // namespace
 
@@ -588,6 +568,39 @@ TEST_F(ImageDecoderTest, RegistrationIsIdempotent) {
 TEST_F(ImageDecoderTest, KernelRegisteredInDispatchTable) {
   const auto &table = KernelDispatchTable();
   EXPECT_NE(table.find("ai.onnx:ImageDecoder"), table.end());
+}
+
+TEST(ImageKernelRegistrationTest, ContextRegistrationIsLocalAndIdempotent) {
+  core::runtime::RuntimeContext local(KernelContext(core::runtime::DefaultOpset(20)));
+  core::runtime::RuntimeContext other(KernelContext(core::runtime::DefaultOpset(20)));
+  const auto before = KernelDispatchTable();
+
+  onnx_light_kernel_images::RegisterImageKernels(local);
+  onnx_light_kernel_images::RegisterImageKernels(local);
+  onnx_light_kernel_images::RegisterImageKernels(other);
+
+  ASSERT_EQ(local.custom_kernels().size(), 1u);
+  EXPECT_EQ(local.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
+  EXPECT_EQ(other.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
+  local.ClearCustomKernels();
+  EXPECT_EQ(other.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
+  const auto after = KernelDispatchTable();
+  ASSERT_EQ(after.size(), before.size());
+  for (const auto &[key, factory] : before) {
+    ASSERT_NE(after.find(key), after.end());
+    EXPECT_EQ(after.at(key).target_type(), factory.target_type());
+  }
+
+  other.tensors()["encoded"] = MakeEncodedTensor(kTiffPackBitsData, sizeof(kTiffPackBitsData));
+  NodeProto node;
+  node.set_op_type("ImageDecoder");
+  node.add_input("encoded");
+  node.add_output("image");
+  core::runtime::RunNode(node, other);
+  const Tensor &image = other.tensors().at("image");
+  ASSERT_EQ(image.shape, (std::vector<int64_t>{1, 2, 3}));
+  EXPECT_EQ((std::vector<uint8_t>(image.bytes(), image.bytes() + image.size_bytes())),
+            (std::vector<uint8_t>{255, 0, 0, 0, 255, 0}));
 }
 
 TEST_F(ImageDecoderTest, TiffConversionUsesOnnxLightExecutor) {
@@ -1020,7 +1033,6 @@ TEST_F(ImageDecoderTest, RunNodeDecodesCompressedTiffThroughAllocator) {
   EXPECT_GT(pool.PeakAllocatedSize(), 0u);
 }
 
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_BACKEND_TEST_API
 TEST_F(ImageDecoderTest, BackendCaseReferenceRuntimeIsScopedToMaterialization) {
   for (auto mode : {core::backend_test::TestMode::TEST, core::backend_test::TestMode::BENCHMARK}) {
     TrackedImageRuntime::constructed = 0;
@@ -1034,13 +1046,7 @@ TEST_F(ImageDecoderTest, BackendCaseReferenceRuntimeIsScopedToMaterialization) {
       ASSERT_TRUE(test_case.build) << test_case.name;
       // Invoke the persistent builder twice without unloading it.
       for (int repeat = 0; repeat < 2; ++repeat) {
-        auto data = [](auto &build) {
-          if constexpr (std::is_invocable_v<decltype(build), bool>) {
-            return build(true);
-          } else {
-            return build();
-          }
-        }(test_case.build);
+        auto data = test_case.build(true);
         EXPECT_EQ(TrackedImageRuntime::constructed, ++built) << test_case.name;
         EXPECT_EQ(TrackedImageRuntime::alive, 0u) << test_case.name;
         ASSERT_EQ(data.data_sets.size(), 1u);
@@ -1107,4 +1113,3 @@ TEST_F(ImageDecoderTest, BackendCasesRunThroughRegisteredKernel) {
   }
   EXPECT_GT(executed, 0u);
 }
-#endif

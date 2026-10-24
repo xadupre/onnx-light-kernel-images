@@ -192,4 +192,7 @@ jobs:
       - name: Run Python image tests
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: pytest -q unittests/python/test_image_decoder.py unittests/python/test_image_formats.py
+        run: >-
+          pytest -q unittests/python/test_image_decoder.py
+          unittests/python/test_image_formats.py
+          unittests/python/test_session_registration.py

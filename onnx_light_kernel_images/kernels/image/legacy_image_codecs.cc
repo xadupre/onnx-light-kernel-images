@@ -9,11 +9,7 @@
 #include "onnx_light_kernel_images/tiff_compression.h"
 #include "onnx_threads/parallel_for.h"
 
-#if __has_include("onnx_core/runtime/memory/temporary_buffer.h")
 #include "onnx_core/runtime/memory/temporary_buffer.h"
-#else
-#include "onnx_core/runtime/temporary_buffer.h"
-#endif
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
 
 #include <algorithm>
