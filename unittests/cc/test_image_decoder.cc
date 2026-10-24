@@ -604,10 +604,11 @@ TEST(ImageKernelRegistrationTest, ContextRegistrationIsLocalAndIdempotent) {
   EXPECT_EQ(other.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
   local.ClearCustomKernels();
   EXPECT_EQ(other.custom_kernels().count("ai.onnx:ImageDecoder"), 1u);
-  ASSERT_EQ(KernelDispatchTable().size(), before.size());
+  const auto after = KernelDispatchTable();
+  ASSERT_EQ(after.size(), before.size());
   for (const auto &[key, factory] : before) {
-    ASSERT_NE(KernelDispatchTable().find(key), KernelDispatchTable().end());
-    EXPECT_EQ(KernelDispatchTable().at(key).target_type(), factory.target_type());
+    ASSERT_NE(after.find(key), after.end());
+    EXPECT_EQ(after.at(key).target_type(), factory.target_type());
   }
 
   other.tensors()["encoded"] = MakeEncodedTensor(kTiffPackBitsData, sizeof(kTiffPackBitsData));

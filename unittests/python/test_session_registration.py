@@ -59,8 +59,8 @@ register_image_kernels(local)
 np.testing.assert_array_equal(local.run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]])
 np.testing.assert_array_equal(before.run(None, feeds)[0], expected)
 np.testing.assert_array_equal(ReferenceEvaluator(model).run(None, feeds)[0], expected)
-assert local._ctx.unregister_custom_kernel("", "ImageDecoder")
-assert not before._ctx.unregister_custom_kernel("", "ImageDecoder")
+assert local._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder")
+assert not before._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder")
 
 # Local registration must not consume the one-time global registration.
 register_image_kernels(None)
