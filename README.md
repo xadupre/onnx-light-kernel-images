@@ -66,6 +66,8 @@ pip install --find-links https://github.com/xadupre/onnx-light/releases/expanded
 ```
 
 The required `onnx-light==0.2.0` wheels are hosted on GitHub Releases, not PyPI.
+Only the onnx-light 0.2.0 runtime API is supported; older API compatibility paths
+are not provided.
 For other pip-based install commands below, set `PIP_FIND_LINKS` to the same URL.
 Python builds link to that runtime's shared libraries so kernel registration
 updates the same dispatch table used by `ReferenceEvaluator`.

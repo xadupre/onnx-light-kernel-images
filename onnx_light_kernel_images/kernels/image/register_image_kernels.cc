@@ -6,16 +6,9 @@
 #include "onnx_light_kernel_images/kernels/image/legacy_image_codecs.h"
 #include "onnx_light_kernel_images/tiff_compression.h"
 
-#if __has_include("onnx_core/runtime/kernels/kernel_dispatch_table.h")
-#define ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API 1
 #include "onnx_core/runtime/kernels/kernel_dispatch_table.h"
 #include "onnx_core/runtime/kernels/node_helpers.h"
 #include "onnx_core/runtime/memory/simple_tensor.h"
-#else
-#include "onnx_core/runtime/kernel_dispatch_table.h"
-#include "onnx_core/runtime/node_helpers.h"
-#include "onnx_core/runtime/simple_tensor.h"
-#endif
 #include "onnx_core/runtime/runtime_context.h"
 #include "onnx_core/symbolic/sym_tensor.h"
 #include "onnx_extensions/kernels/kernels/image/include_image_kernels.h"
@@ -36,7 +29,6 @@ using ::onnx_light::core::runtime::DataType;
 using ::onnx_light::core::runtime::GetAttributeStringOrDefault;
 using ::onnx_light::core::runtime::GetInput;
 using ::onnx_light::core::runtime::KernelBase;
-using ::onnx_light::core::runtime::MakeOutputTensor;
 using ::onnx_light::core::runtime::NodeKernelFn;
 using ::onnx_light::core::runtime::RawBufferAllocator;
 using ::onnx_light::core::runtime::RegisterKernelFn;
@@ -74,11 +66,7 @@ public:
     int64_t height = 0;
     int64_t width = 0;
     std::vector<uint8_t> pixels;
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API
     RawBufferAllocator *workspace_allocator = rt.execution_allocator();
-#else
-    RawBufferAllocator *workspace_allocator = rt.allocator();
-#endif
     const bool decoded = TryDecodeLegacyCodecImage(input.bytes(), input.size_bytes(), pixel_format,
                                                    height, width, pixels, workspace_allocator);
     if (!decoded) {
@@ -87,33 +75,19 @@ public:
       pixels.clear();
     }
 
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API
     Tensor output = rt.MakeOutputTensor(0, static_cast<int32_t>(DataType::UINT8),
                                         {height, width, channels}, pixels.size());
-#else
-    Tensor output = MakeOutputTensor(static_cast<int32_t>(DataType::UINT8),
-                                     {height, width, channels}, pixels.size(), rt.allocator());
-#endif
     if (!pixels.empty()) {
       std::memcpy(output.mutable_bytes(), pixels.data(), pixels.size());
     }
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API
     SetOutput(node, 0, std::move(output), rt);
-#else
-    SetOutput(node, 0, std::move(output), rt.tensors());
-#endif
   }
 };
 
 template <class KernelT> NodeKernelFn MakeKernel() {
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API
-  return [](const NodeProto &node, RuntimeContext &rt,
+  return [](const NodeProto &node, RuntimeContext &,
             const auto &kernel_ctx) -> std::unique_ptr<KernelBase> {
     auto kernel = std::make_unique<KernelT>(kernel_ctx);
-#else
-  return [](const NodeProto &node, RuntimeContext &rt) -> std::unique_ptr<KernelBase> {
-    auto kernel = std::make_unique<KernelT>(rt.kernel_ctx());
-#endif
     kernel->set_node(node);
     return kernel;
   };
@@ -132,17 +106,8 @@ void RegisterImageKernels() {
 }
 
 void RegisterImageKernels(RuntimeContext &context) {
-#if ONNX_LIGHT_KERNEL_IMAGES_HAS_CURRENT_RUNTIME_API
   context.RegisterKernelFn("ai.onnx", "ImageDecoder", onnx_light::core::symbolic::Device::kCPU,
                            MakeKernel<TiffAwareImageDecoder>());
-#else
-  context.RegisterCustomKernel("ai.onnx", "ImageDecoder",
-                               [](const NodeProto &node, RuntimeContext &rt) {
-                                 TiffAwareImageDecoder kernel(rt.kernel_ctx());
-                                 kernel.set_node(node);
-                                 kernel.Run(rt);
-                               });
-#endif
 }
 
 } // namespace onnx_light_kernel_images
