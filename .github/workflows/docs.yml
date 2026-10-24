@@ -1,10 +1,10 @@
 name: docs
 
 on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
+  workflow_dispatch:
+  schedule:
+    # Every Monday at 06:00 UTC.
+    - cron: "0 6 * * 1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -67,3 +67,29 @@ jobs:
       # example, so this step fails if the documentation stops running.
       - name: Build documentation
         run: sphinx-build -b html docs dist/html
+
+  report_failure:
+    name: report documentation failure
+    needs: docs
+    if: ${{ always() && needs.docs.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Weekly documentation build failed"
+          body="The documentation workflow failed. See the logs: ${RUN_URL}"
+          issue=$(gh issue list --state open --search "\"${title}\" in:title" \
+            --json number,title --jq '.[] | select(.title == "Weekly documentation build failed") | .number' \
+            --limit 100 | head -n 1)
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
