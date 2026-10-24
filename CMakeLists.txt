@@ -414,7 +414,7 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
     endif()
     execute_process(
       COMMAND "${Python_EXECUTABLE}" -c
-          "from onnx_light import get_cpp_build_info; print(get_cpp_build_info().get('python_stable_abi', 'ON'))"
+          "from onnx_light import get_cpp_build_info; print(get_cpp_build_info()['python_stable_abi'])"
       RESULT_VARIABLE _onnx_light_abi_status
       OUTPUT_VARIABLE _onnx_light_stable_abi
       OUTPUT_STRIP_TRAILING_WHITESPACE)

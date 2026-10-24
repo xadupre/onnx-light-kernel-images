@@ -175,7 +175,14 @@ image = session.run(None, {"encoded": encoded})[0]
 
 `register_image_kernels(context)` also accepts a low-level `RuntimeContext`.
 Register before the first run: already-resolved kernels are not replaced.
+Repeated calls refresh the local registration for future kernel resolutions,
+including replacing an existing local `ImageDecoder` registration.
 Calling without an argument (or with `None`) retains global registration.
+
+Python builds detect the binding ABI from onnx-light's `get_cpp_build_info()`.
+If that runtime does not report `python_stable_abi`, configuration fails rather
+than guessing. Set `-DONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI=ON` or `OFF`
+to match the target runtime explicitly; this is required when cross-compiling.
 
 Once the kernels are registered, build an ``ImageDecoder`` ONNX model and run it
 through onnx-light's ``ReferenceEvaluator``, feeding the encoded bytestream as a
