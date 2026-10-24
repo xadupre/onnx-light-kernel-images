@@ -18,11 +18,9 @@ concurrency:
 env:
   PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
 
-# The Python extension links the prebuilt onnx-light C++ static libraries, which
-# onnx-light publishes only for Linux and Windows (macOS has no archive and its
-# CMake configure step fails on purpose). Those static libraries are built on
-# ubuntu-24.04, so the Linux wheels are built natively on the same distribution
-# rather than inside an older manylinux container to keep the C++ ABI compatible.
+# The Python extension links the shared runtime from the onnx-light wheel.
+# Linux wheels are built natively on ubuntu-24.04 to keep the C++ ABI compatible.
+# macOS wheels match onnx-light's universal2 architectures and deployment target.
 #
 # When triggered by a tag push (or a workflow_dispatch with a tag), each matrix
 # job attaches its wheel to the matching GitHub Release (requires
@@ -36,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        artifact_suffix: [linux-x86_64, linux-aarch64, windows-AMD64, windows-ARM64]
+        artifact_suffix: [linux-x86_64, linux-aarch64, windows-AMD64, windows-ARM64, macos-universal2]
         python-version: ["3.12", "3.13"]
         include:
           - artifact_suffix: linux-x86_64
@@ -47,6 +45,10 @@ jobs:
             runs-on: windows-latest
           - artifact_suffix: windows-ARM64
             runs-on: windows-11-arm
+          - artifact_suffix: macos-universal2
+            runs-on: macos-latest
+            archflags: -arch arm64 -arch x86_64
+            deployment_target: "13.0"
 
     steps:
       - uses: actions/checkout@v7
@@ -70,9 +72,19 @@ jobs:
         shell: bash
         env:
           CMAKE_ARGS: -DONNX_HARDENING=ON
+          ARCHFLAGS: ${{ matrix.archflags }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
         run: |
           python -m pip install --upgrade pip build
           python -m build --wheel --outdir wheelhouse
+
+      - name: Smoke test macOS wheel
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          python -m pip install wheelhouse/*.whl
+          cd "${RUNNER_TEMP}"
+          python -c "from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels; register_image_kernels()"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
