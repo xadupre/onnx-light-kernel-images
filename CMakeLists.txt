@@ -258,7 +258,7 @@ elseif(NOT DEFINED ONNX_LIGHT_ROOT)
   endif()
 
   set(_onnx_light_url
-      "https://github.com/xadupre/onnx-light/releases/download/0.2.1/${_onnx_light_archive}")
+      "https://github.com/xadupre/onnx-light/releases/download/0.2.0/${_onnx_light_archive}")
 
   FetchContent_Declare(
     onnx_light_cpp

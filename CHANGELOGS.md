@@ -6,8 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Dependencies
 
-- Update the package version and the required onnx-light runtime to 0.2.1.
-- Use the onnx-light 0.2.1 C++ release archives and Python wheels.
+- Update the package version to 0.2.1.
+- Keep the required onnx-light runtime, C++ release archives, and Python wheels
+  at the published 0.2.0 release.
 
 ## [0.2.0]
 

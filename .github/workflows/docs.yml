@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.1
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
 
 jobs:
   docs:
@@ -51,9 +51,9 @@ jobs:
       # ReferenceEvaluator.
       # Use the released Python runtime matching the C++ archive.
       - name: Install onnx-light Python runtime
-        run: pip install "onnx-light==0.2.1" -v
+        run: pip install "onnx-light==0.2.0" -v
 
-      # Build the ImageDecoder kernel (downloads the prebuilt onnx-light 0.2.1
+      # Build the ImageDecoder kernel (downloads the prebuilt onnx-light 0.2.0
       # C++ archive) and install the documentation dependencies.
       - name: Build and install package with docs extras
         env:
