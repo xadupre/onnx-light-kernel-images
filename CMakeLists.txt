@@ -416,12 +416,18 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
       "${CMAKE_CURRENT_SOURCE_DIR}")
   target_link_libraries(_imgpykernels PRIVATE lib_onnx_light_kernel_images)
 
-  # Set RPATH so the extension finds liblib_onnx_light_kernel_images.so
-  # in the same directory at runtime.
-  set_target_properties(_imgpykernels PROPERTIES
-      INSTALL_RPATH "$ORIGIN"
-      BUILD_RPATH "$ORIGIN"
-  )
+  # Set RPATH so the extension finds its shared libraries at runtime.
+  if(APPLE)
+    set_target_properties(_imgpykernels PROPERTIES
+        INSTALL_RPATH "@loader_path;@loader_path/../../onnx_light/onnx_py"
+        BUILD_RPATH "@loader_path"
+    )
+  else()
+    set_target_properties(_imgpykernels PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_RPATH "$ORIGIN"
+    )
+  endif()
 
   install(TARGETS _imgpykernels
       LIBRARY DESTINATION onnx_light_kernel_images/onnx_py

@@ -47,8 +47,9 @@ pixel-based scheduling for wide images while computing strip addresses once per 
 
 Prebuilt C++ archives and Python wheels are available on the
 [GitHub Releases page](https://github.com/xadupre/onnx-light-kernel-images/releases).
-Pushing a new tag builds and attaches binaries for Linux and Windows
-(x86-64 and ARM64); wheels target Python 3.12–3.13. Release notes are generated
+Pushing a new tag builds and attaches C++ archives and wheels for Linux and Windows
+(x86-64 and ARM64), plus macOS universal2 wheels (Intel and Apple Silicon,
+macOS 13 or newer); wheels target Python 3.12–3.13. Release notes are generated
 from the changes since the previous release. See [CHANGELOGS.md](CHANGELOGS.md)
 for the project changelog.
 
@@ -126,9 +127,9 @@ flag is probed and silently skipped when the active toolchain does not support
 it. With a pip build the option is forwarded via
 `-C cmake.define.ONNX_HARDENING=ON`.
 
-> **macOS:** onnx-light publishes prebuilt C++ archives only for Linux and
-> Windows. On macOS, build and install the onnx-light C++ SDK from source
-> (`-DONNX_LIGHT_BUILD_PYTHON=OFF`) and point the build at it with
+> **macOS C++ builds:** extract onnx-light's `onnx-light-cpp-macos-universal2.tar.gz`
+> release archive (or build its SDK from source with
+> `-DONNX_LIGHT_BUILD_PYTHON=OFF`) and set
 > `-DONNX_LIGHT_ROOT=/path/to/onnx-light-install`.
 
 ## C++ usage

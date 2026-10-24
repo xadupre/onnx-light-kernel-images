@@ -22,6 +22,56 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
     os.name == "posix" and shutil.which("bash"), "a POSIX shell is required for the CLI double"
 )
 class TestReleaseWorkflows(unittest.TestCase):
+    def test_macos_universal_wheels(self):
+        workflow = (_REPO_ROOT / ".github" / "workflows" / "build_release_wheel.yml").read_text()
+        self.assertIn("macos-universal2", workflow.split("python-version:", 1)[0])
+        self.assertIn(
+            "- artifact_suffix: macos-universal2\n"
+            "            runs-on: macos-latest\n"
+            "            archflags: -arch arm64 -arch x86_64\n"
+            '            deployment_target: "13.0"',
+            workflow,
+        )
+        self.assertIn("ARCHFLAGS: ${{ matrix.archflags }}", workflow)
+        self.assertIn("MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}", workflow)
+        self.assertIn("python -m build --wheel --outdir wheelhouse", workflow)
+        self.assertIn("python -m pip install wheelhouse/*.whl", workflow)
+        self.assertIn('cd "${RUNNER_TEMP}"', workflow)
+        self.assertIn(
+            "from onnx_light_kernel_images.onnx_py._imgpykernels "
+            "import register_image_kernels; register_image_kernels()",
+            workflow,
+        )
+
+    def test_extension_runtime_paths(self):
+        cmake = (_REPO_ROOT / "CMakeLists.txt").read_text()
+        runtime_paths = cmake.split("  # Set RPATH", 1)[1].split(
+            "  install(TARGETS _imgpykernels", 1
+        )[0]
+        for apple, expected in (
+            ("TRUE", "@loader_path;@loader_path/../../onnx_light/onnx_py"),
+            ("FALSE", "$ORIGIN"),
+        ):
+            with self.subTest(apple=apple), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "CMakeLists.txt").write_text(
+                    "cmake_minimum_required(VERSION 3.15)\n"
+                    "project(runtime_paths NONE)\n"
+                    "add_library(_imgpykernels INTERFACE)\n"
+                    f"set(APPLE {apple})\n"
+                    f"# Set RPATH{runtime_paths}\n"
+                    "get_target_property(rpath _imgpykernels INSTALL_RPATH)\n"
+                    'file(WRITE "${CMAKE_BINARY_DIR}/rpath.txt" "${rpath}")\n'
+                )
+                result = subprocess.run(
+                    ["cmake", "-S", str(root), "-B", str(root / "build")],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual((root / "build" / "rpath.txt").read_text(), expected)
+
     def test_release_notes_and_uploads(self):
         for workflow, asset in (
             ("build_release_cpp.yml", "onnx-light-kernel-images-cpp-"),
