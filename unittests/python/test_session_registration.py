@@ -54,13 +54,39 @@ class TestSessionRegistration(unittest.TestCase):
 
             model = _make_image_decoder_model("RGB")
             feeds = {"encoded": np.frombuffer(TIFF_PACKBITS_DATA, dtype=np.uint8)}
+
+            # Baseline: without any registration, decoding should not be available in this
+            # fresh subprocess. If decoding is available by default, this test would be
+            # sensitive to environment/registration order.
             before = ReferenceEvaluator(model)
-            expected = before.run(None, feeds)[0].copy()
+            try:
+                before.run(None, feeds)
+            except Exception:
+                pass
+            else:
+                raise AssertionError("Decoding unexpectedly succeeded without ImageDecoder registration")
+
+            # Session-local registration should enable decoding only for that session/context.
             local = ReferenceEvaluator(model)
             register_image_kernels(local)
             np.testing.assert_array_equal(local.run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]])
-            np.testing.assert_array_equal(before.run(None, feeds)[0], expected)
-            np.testing.assert_array_equal(ReferenceEvaluator(model).run(None, feeds)[0], expected)
+
+            # Local registration must not leak into other, already-created contexts.
+            try:
+                before.run(None, feeds)
+            except Exception:
+                pass
+            else:
+                raise AssertionError("The ImageDecoder registration leaked into another context")
+
+            # Nor should it affect a new evaluator unless global registration happens.
+            try:
+                ReferenceEvaluator(model).run(None, feeds)
+            except Exception:
+                pass
+            else:
+                raise AssertionError("Decoding unexpectedly succeeded without global ImageDecoder registration")
+
             if not local._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder"):
                 raise AssertionError("The local ImageDecoder registration is missing")
             if before._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder"):
