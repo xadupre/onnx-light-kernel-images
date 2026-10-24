@@ -16,6 +16,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS "Build C++ unit tests." OFF)
 option(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON "Build Python extension." ON)
 option(ONNX_LIGHT_KERNEL_IMAGES_INSTALL "Install the C++ library and headers." ON)
+set(ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI "" CACHE STRING
+    "onnx-light Python binding ABI override (ON or OFF).")
+set_property(CACHE ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI PROPERTY STRINGS ON OFF)
 set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_SOURCE_DIR "" CACHE PATH
     "Path to a local onnx-light source tree whose headers match the already-built Python runtime.")
 set(ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY "" CACHE FILEPATH
@@ -403,7 +406,12 @@ if(ONNX_LIGHT_KERNEL_IMAGES_BUILD_PYTHON)
   list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
   find_package(nanobind CONFIG REQUIRED)
 
-  nanobind_add_module(_imgpykernels STABLE_ABI ${PY_KERNELS_SOURCES})
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/OnnxLightPythonABI.cmake")
+  if(_onnx_light_stable_abi STREQUAL "OFF")
+    nanobind_add_module(_imgpykernels ${PY_KERNELS_SOURCES})
+  else()
+    nanobind_add_module(_imgpykernels STABLE_ABI ${PY_KERNELS_SOURCES})
+  endif()
   target_include_directories(_imgpykernels PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}")
   target_link_libraries(_imgpykernels PRIVATE lib_onnx_light_kernel_images)
