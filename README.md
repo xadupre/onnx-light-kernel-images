@@ -175,8 +175,9 @@ image = session.run(None, {"encoded": encoded})[0]
 
 `register_image_kernels(context)` also accepts a low-level `RuntimeContext`.
 Register before the first run: already-resolved kernels are not replaced.
-Repeated calls refresh the local registration for future kernel resolutions,
-including replacing an existing local `ImageDecoder` registration.
+Repeated calls replace the local `ImageDecoder` registration used for future
+kernel resolutions. Kernel instances already resolved by existing nodes remain
+unchanged.
 Calling without an argument (or with `None`) registers globally (idempotently),
 updating the global dispatch table.
 

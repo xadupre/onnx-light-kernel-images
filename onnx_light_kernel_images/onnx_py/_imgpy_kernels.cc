@@ -22,13 +22,13 @@ NB_MODULE(_imgpykernels, m) {
           onnx_light_kernel_images::RegisterImageKernels();
           return;
         }
-        const bool has_runtime_context = nb::hasattr(context, "_ctx");
-        if (has_runtime_context) {
+        const bool has_ctx_attribute = nb::hasattr(context, "_ctx");
+        if (has_ctx_attribute) {
           context = context.attr("_ctx");
         }
         using onnx_light::core::runtime::RuntimeContext;
         if (!nb::isinstance<RuntimeContext>(context)) {
-          if (has_runtime_context) {
+          if (has_ctx_attribute) {
             throw nb::type_error("context._ctx must be a RuntimeContext");
           }
           throw nb::type_error("context must be a RuntimeContext or ReferenceEvaluator");

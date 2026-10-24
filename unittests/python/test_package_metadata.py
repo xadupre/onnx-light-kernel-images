@@ -57,12 +57,7 @@ class TestPackageMetadata(unittest.TestCase):
         )
 
     def test_python_binding_abi_requires_explicit_metadata_or_override(self):
-        cmake = (_REPO_ROOT / "CMakeLists.txt").read_text()
-        probe = cmake.split(
-            "  # Native RuntimeContext arguments must share "
-            "the runtime's nanobind type registry.\n",
-            1,
-        )[1].split('  if(_onnx_light_stable_abi STREQUAL "OFF")', 1)[0]
+        abi_module = _REPO_ROOT / "cmake" / "OnnxLightPythonABI.cmake"
         cases = (
             ({}, "", None),
             ({"python_stable_abi": "unknown"}, "", None),
@@ -86,8 +81,8 @@ class TestPackageMetadata(unittest.TestCase):
                 script.write_text(
                     f'set(Python_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
                     f'set(ONNX_LIGHT_KERNEL_IMAGES_PYTHON_STABLE_ABI "{override}")\n'
-                    + probe
-                    + '\nmessage(STATUS "Detected ABI: ${_onnx_light_stable_abi}")\n',
+                    f'include("{abi_module.as_posix()}")\n'
+                    'message(STATUS "Detected ABI: ${_onnx_light_stable_abi}")\n',
                     encoding="utf-8",
                 )
                 result = subprocess.run(
