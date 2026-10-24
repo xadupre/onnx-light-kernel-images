@@ -6,6 +6,7 @@
 import os
 import subprocess
 import sys
+import textwrap
 import unittest
 
 import numpy as np
@@ -44,30 +45,34 @@ class TestSessionRegistration(unittest.TestCase):
 
     def test_registration_does_not_leak(self):
         # A fresh process keeps global registrations in other tests from hiding leaks.
-        code = """
-import numpy as np
-from onnx_light.onnx.reference import ReferenceEvaluator
-from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels
-from test_image_formats import TIFF_PACKBITS_DATA, _make_image_decoder_model
+        code = textwrap.dedent(
+            """
+            import numpy as np
+            from onnx_light.onnx.reference import ReferenceEvaluator
+            from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels
+            from test_image_formats import TIFF_PACKBITS_DATA, _make_image_decoder_model
 
-model = _make_image_decoder_model("RGB")
-feeds = {"encoded": np.frombuffer(TIFF_PACKBITS_DATA, dtype=np.uint8)}
-before = ReferenceEvaluator(model)
-expected = before.run(None, feeds)[0].copy()
-local = ReferenceEvaluator(model)
-register_image_kernels(local)
-np.testing.assert_array_equal(local.run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]])
-np.testing.assert_array_equal(before.run(None, feeds)[0], expected)
-np.testing.assert_array_equal(ReferenceEvaluator(model).run(None, feeds)[0], expected)
-assert local._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder")
-assert not before._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder")
+            model = _make_image_decoder_model("RGB")
+            feeds = {"encoded": np.frombuffer(TIFF_PACKBITS_DATA, dtype=np.uint8)}
+            before = ReferenceEvaluator(model)
+            expected = before.run(None, feeds)[0].copy()
+            local = ReferenceEvaluator(model)
+            register_image_kernels(local)
+            np.testing.assert_array_equal(local.run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]])
+            np.testing.assert_array_equal(before.run(None, feeds)[0], expected)
+            np.testing.assert_array_equal(ReferenceEvaluator(model).run(None, feeds)[0], expected)
+            if not local._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder"):
+                raise AssertionError("The local ImageDecoder registration is missing")
+            if before._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder"):
+                raise AssertionError("The ImageDecoder registration leaked into another context")
 
-# Local registration must not consume the one-time global registration.
-register_image_kernels(None)
-np.testing.assert_array_equal(
-    ReferenceEvaluator(model).run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]]
-)
-"""
+            # Local registration must not consume the one-time global registration.
+            register_image_kernels(None)
+            np.testing.assert_array_equal(
+                ReferenceEvaluator(model).run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]]
+            )
+            """
+        )
         env = dict(os.environ)
         env["PYTHONPATH"] = os.pathsep.join(sys.path)
         result = subprocess.run(
