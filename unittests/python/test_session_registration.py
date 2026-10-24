@@ -45,8 +45,7 @@ class TestSessionRegistration(unittest.TestCase):
 
     def test_registration_does_not_leak(self):
         # A fresh process keeps global registrations in other tests from hiding leaks.
-        code = textwrap.dedent(
-            """
+        code = textwrap.dedent("""
             import numpy as np
             from onnx_light.onnx.reference import ReferenceEvaluator
             from onnx_light_kernel_images.onnx_py._imgpykernels import register_image_kernels
@@ -55,16 +54,10 @@ class TestSessionRegistration(unittest.TestCase):
             model = _make_image_decoder_model("RGB")
             feeds = {"encoded": np.frombuffer(TIFF_PACKBITS_DATA, dtype=np.uint8)}
 
-            # Baseline: without any registration, decoding should not be available in this
-            # fresh subprocess. If decoding is available by default, this test would be
-            # sensitive to environment/registration order.
+            # The built-in decoder returns an empty image for unsupported TIFF data.
+            empty_image = np.empty((0, 0, 3), dtype=np.uint8)
             before = ReferenceEvaluator(model)
-            try:
-                before.run(None, feeds)
-            except Exception:
-                pass
-            else:
-                raise AssertionError("Decoding unexpectedly succeeded without ImageDecoder registration")
+            np.testing.assert_array_equal(before.run(None, feeds)[0], empty_image)
 
             # Session-local registration should enable decoding only for that session/context.
             local = ReferenceEvaluator(model)
@@ -72,20 +65,12 @@ class TestSessionRegistration(unittest.TestCase):
             np.testing.assert_array_equal(local.run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]])
 
             # Local registration must not leak into other, already-created contexts.
-            try:
-                before.run(None, feeds)
-            except Exception:
-                pass
-            else:
-                raise AssertionError("The ImageDecoder registration leaked into another context")
+            np.testing.assert_array_equal(before.run(None, feeds)[0], empty_image)
 
             # Nor should it affect a new evaluator unless global registration happens.
-            try:
-                ReferenceEvaluator(model).run(None, feeds)
-            except Exception:
-                pass
-            else:
-                raise AssertionError("Decoding unexpectedly succeeded without global ImageDecoder registration")
+            np.testing.assert_array_equal(
+                ReferenceEvaluator(model).run(None, feeds)[0], empty_image
+            )
 
             if not local._ctx.unregister_custom_kernel("ai.onnx", "ImageDecoder"):
                 raise AssertionError("The local ImageDecoder registration is missing")
@@ -97,8 +82,7 @@ class TestSessionRegistration(unittest.TestCase):
             np.testing.assert_array_equal(
                 ReferenceEvaluator(model).run(None, feeds)[0], [[[255, 0, 0], [0, 255, 0]]]
             )
-            """
-        )
+            """)
         env = dict(os.environ)
         env["PYTHONPATH"] = os.pathsep.join(sys.path)
         result = subprocess.run(
