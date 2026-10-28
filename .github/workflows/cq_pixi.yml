@@ -9,6 +9,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
+
 jobs:
   check_recent_commit:
     name: check recent commit
@@ -55,5 +58,19 @@ jobs:
         with:
           pixi-version: latest
           cache: true
+      - name: Install onnx-light Python runtime
+        run: |
+          pixi run --environment default pip install "onnx-light==0.2.0"
+          pixi run --environment default python - <<'PY'
+          import os
+          from pathlib import Path
+          from onnx_light import get_cpp_build_info
+
+          library_dir = Path(get_cpp_build_info()["library_dir"])
+          paths = [str(library_dir), str(library_dir.parent.parent / "onnx_light.libs")]
+          paths.append(os.environ.get("LD_LIBRARY_PATH", ""))
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"LD_LIBRARY_PATH={os.pathsep.join(paths)}\n")
+          PY
       - name: Run Pixi Python tests
-        run: pixi run test-python
+        run: pixi run --environment default test-python

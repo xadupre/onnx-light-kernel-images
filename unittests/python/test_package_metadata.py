@@ -34,7 +34,7 @@ class TestPackageMetadata(unittest.TestCase):
         metadata = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
         self.assertIn("onnx-light==0.2.0", metadata["project"]["dependencies"])
         self.assertIn("onnx-light==0.2.0", metadata["build-system"]["requires"])
-        for filename in ("ci_core.yml", "docs.yml"):
+        for filename in ("ci_core.yml", "docs.yml", "cq_pixi.yml"):
             with self.subTest(workflow=filename):
                 self.assertIn(
                     'pip install "onnx-light==0.2.0"',
@@ -46,13 +46,26 @@ class TestPackageMetadata(unittest.TestCase):
         )
 
     def test_release_wheel_discovery(self):
-        for filename in ("ci_core.yml", "docs.yml", "build_release_wheel.yml"):
+        for filename in ("ci_core.yml", "docs.yml", "build_release_wheel.yml", "cq_pixi.yml"):
             with self.subTest(workflow=filename):
                 self.assertIn(
                     "  PIP_FIND_LINKS: "
                     "https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0",
                     (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
                 )
+
+    def test_pixi_runtime_setup(self):
+        workflow = (_REPO_ROOT / ".github" / "workflows" / "cq_pixi.yml").read_text()
+        install = 'pixi run --environment default pip install "onnx-light==0.2.0"'
+        configure = "pixi run --environment default python - <<'PY'"
+        test = "pixi run --environment default test-python"
+        self.assertLess(workflow.index(install), workflow.index(configure))
+        self.assertLess(workflow.index(configure), workflow.index(test))
+        self.assertIn('Path(get_cpp_build_info()["library_dir"])', workflow)
+        self.assertIn('library_dir.parent.parent / "onnx_light.libs"', workflow)
+        self.assertIn('os.environ.get("LD_LIBRARY_PATH", "")', workflow)
+        self.assertIn('open(os.environ["GITHUB_ENV"], "a"', workflow)
+        self.assertIn('env.write(f"LD_LIBRARY_PATH={os.pathsep.join(paths)}\\n")', workflow)
 
     def test_cpp_release_archive(self):
         self.assertIn(
