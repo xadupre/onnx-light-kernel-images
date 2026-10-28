@@ -34,7 +34,13 @@ class TestPackageMetadata(unittest.TestCase):
         metadata = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
         self.assertIn("onnx-light==0.2.0", metadata["project"]["dependencies"])
         self.assertIn("onnx-light==0.2.0", metadata["build-system"]["requires"])
-        for filename in ("ci_core.yml", "docs.yml", "cq_pixi.yml"):
+        for filename in (
+            "ci_core.yml",
+            "docs.yml",
+            "cq_hardening.yml",
+            "cq_asan_ubsan.yml",
+            "cq_pixi.yml",
+        ):
             with self.subTest(workflow=filename):
                 self.assertIn(
                     'pip install "onnx-light==0.2.0"',
@@ -46,13 +52,31 @@ class TestPackageMetadata(unittest.TestCase):
         )
 
     def test_release_wheel_discovery(self):
-        for filename in ("ci_core.yml", "docs.yml", "build_release_wheel.yml", "cq_pixi.yml"):
+        for filename in (
+            "ci_core.yml",
+            "docs.yml",
+            "build_release_wheel.yml",
+            "cq_hardening.yml",
+            "cq_asan_ubsan.yml",
+            "cq_pixi.yml",
+        ):
             with self.subTest(workflow=filename):
                 self.assertIn(
                     "  PIP_FIND_LINKS: "
                     "https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0",
                     (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
                 )
+
+    def test_acq_runtime_library_paths(self):
+        for filename in ("cq_hardening.yml", "cq_asan_ubsan.yml"):
+            with self.subTest(workflow=filename):
+                workflow = (_REPO_ROOT / ".github" / "workflows" / filename).read_text()
+                setup, build = workflow.split("      - name: Build and install package", 1)
+                self.assertIn('pip install "onnx-light==0.2.0"', setup)
+                self.assertIn('Path(get_cpp_build_info()["library_dir"])', setup)
+                self.assertIn('library_dir.parent.parent / "onnx_light.libs"', setup)
+                self.assertIn('env.write(f"LD_LIBRARY_PATH={os.pathsep.join(paths)}\\n")', setup)
+                self.assertIn("cmake.define.ONNX_LIGHT_KERNEL_IMAGES_BUILD_TESTS=ON", build)
 
     def test_pixi_runtime_setup(self):
         workflow = (_REPO_ROOT / ".github" / "workflows" / "cq_pixi.yml").read_text()
