@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
+
 jobs:
   check_recent_commit:
     name: check recent commit
@@ -92,6 +95,21 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL=$(python -c 'import os; print(os.cpu_count() or 1)')
           echo "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}" >> "$GITHUB_ENV"
           echo "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}"
+
+      - name: Install onnx-light Python runtime
+        run: |
+          pip install "onnx-light==0.2.0"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from onnx_light import get_cpp_build_info
+
+          library_dir = Path(get_cpp_build_info()["library_dir"])
+          paths = [str(library_dir), str(library_dir.parent.parent / "onnx_light.libs")]
+          paths.append(os.environ.get("LD_LIBRARY_PATH", ""))
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"LD_LIBRARY_PATH={os.pathsep.join(paths)}\n")
+          PY
 
       - name: Build and install package (Release + ONNX_HARDENING=ON)
         env:
