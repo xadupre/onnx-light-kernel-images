@@ -3,9 +3,12 @@
 import os
 import sys
 
+from onnx_light_kernel_images import __version__
+
 sys.path.insert(0, os.path.abspath("_ext"))
 
 project = "onnx-light-kernel-images"
+release = __version__
 copyright = "2025, xadupre"
 author = "xadupre"
 

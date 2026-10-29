@@ -4,6 +4,7 @@
 """Check release metadata and the matching onnx-light runtime dependency."""
 
 import os
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class TestPackageMetadata(unittest.TestCase):
+    def test_documentation_version(self):
+        config = runpy.run_path(str(_REPO_ROOT / "docs" / "conf.py"))
+        self.assertEqual(config["release"], __version__)
+        self.assertIn(
+            "Version: |release|",
+            (_REPO_ROOT / "docs" / "index.rst").read_text(),
+        )
+
     def test_release_version(self):
         self.assertEqual(__version__, "0.2.1")
         for filename, declaration in (
