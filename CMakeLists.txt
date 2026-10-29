@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 4.0)
 
 # Default to a Release build when no build type is specified.
 get_property(_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -258,7 +258,7 @@ elseif(NOT DEFINED ONNX_LIGHT_ROOT)
   endif()
 
   set(_onnx_light_url
-      "https://github.com/xadupre/onnx-light/releases/download/0.2.0/${_onnx_light_archive}")
+      "https://github.com/xadupre/onnx-light/releases/download/0.2.2/${_onnx_light_archive}")
 
   FetchContent_Declare(
     onnx_light_cpp

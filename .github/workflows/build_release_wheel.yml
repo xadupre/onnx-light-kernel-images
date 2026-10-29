@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.2
 
 # The Python extension links the shared runtime from the onnx-light wheel.
 # Linux wheels are built natively on ubuntu-24.04 to keep the C++ ABI compatible.

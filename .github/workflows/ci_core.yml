@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.2
 
 jobs:
   core_tests:
@@ -63,7 +63,7 @@ jobs:
       - name: Install onnx-light Python runtime
         shell: bash
         run: |
-          pip install "onnx-light==0.2.0"
+          pip install "onnx-light==0.2.2"
           python - <<'PY'
           import os
           from pathlib import Path
@@ -155,7 +155,7 @@ jobs:
           SCCACHE_GHA_ENABLED: "true"
         shell: bash
         run: |
-          pip install nanobind scikit-build-core setuptools numpy pytest matplotlib ml_dtypes onnxruntime openpyxl pandas tqdm
+          pip install "cmake>=4.0" nanobind scikit-build-core setuptools numpy pytest matplotlib ml_dtypes onnxruntime openpyxl pandas tqdm
           onnx_light_source="${RUNNER_TEMP}/onnx-light"
           git clone --depth 1 --branch main https://github.com/xadupre/onnx-light.git "${onnx_light_source}"
           CMAKE_ARGS="-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
