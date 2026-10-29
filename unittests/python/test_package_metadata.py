@@ -44,7 +44,6 @@ class TestPackageMetadata(unittest.TestCase):
         self.assertIn("onnx-light==0.2.2", metadata["project"]["dependencies"])
         self.assertIn("onnx-light==0.2.2", metadata["build-system"]["requires"])
         for filename in (
-            "ci_core.yml",
             "docs.yml",
             "cq_hardening.yml",
             "cq_asan_ubsan.yml",
@@ -59,6 +58,17 @@ class TestPackageMetadata(unittest.TestCase):
             "Install onnx-light==0.2.2 before building the Python extension.",
             (_REPO_ROOT / "cmake" / "OnnxLightPython.cmake").read_text(),
         )
+
+    def test_core_ci_uses_full_runtime_without_build_isolation(self):
+        workflow = (_REPO_ROOT / ".github" / "workflows" / "ci_core.yml").read_text()
+        for wheel in (
+            "onnx_light-0.2.2-cp313-cp313-win_amd64.whl",
+            "onnx_light-0.2.2-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+        ):
+            with self.subTest(wheel=wheel):
+                self.assertIn(wheel, workflow)
+        self.assertIn("Install Python build dependencies", workflow)
+        self.assertEqual(workflow.count("pip install --no-build-isolation"), 2)
 
     def test_release_wheel_discovery(self):
         for filename in (
@@ -118,7 +128,7 @@ class TestPackageMetadata(unittest.TestCase):
         self.assertEqual(pixi["dependencies"]["cmake"], ">=4.0")
         core_workflow = (_REPO_ROOT / ".github" / "workflows" / "ci_core.yml").read_text()
         cmake_setup = 'python -m pip install "cmake>=4.0"'
-        build = core_workflow.index("pip install -C build-dir=build")
+        build = core_workflow.index("pip install --no-build-isolation -C build-dir=build")
         self.assertLess(core_workflow.index(cmake_setup), build)
         for filename in (
             "build_release_cpp.yml",
