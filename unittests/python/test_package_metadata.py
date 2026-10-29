@@ -109,13 +109,17 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_cmake_minimum_version(self):
         metadata = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
-        self.assertIn("cmake>=4.0", metadata["build-system"]["requires"])
+        self.assertNotIn("cmake>=4.0", metadata["build-system"]["requires"])
         self.assertIn(
             "cmake_minimum_required(VERSION 4.0)",
             (_REPO_ROOT / "CMakeLists.txt").read_text(),
         )
         pixi = tomllib.loads((_REPO_ROOT / "pixi.toml").read_text())
         self.assertEqual(pixi["dependencies"]["cmake"], ">=4.0")
+        core_workflow = (_REPO_ROOT / ".github" / "workflows" / "ci_core.yml").read_text()
+        cmake_setup = 'python -m pip install "cmake>=4.0"'
+        build = core_workflow.index("pip install -C build-dir=build")
+        self.assertLess(core_workflow.index(cmake_setup), build)
         for filename in (
             "build_release_cpp.yml",
             "ci_core.yml",
