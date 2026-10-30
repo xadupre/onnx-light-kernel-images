@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.2
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.3
 
 jobs:
   core_tests:
@@ -67,9 +67,9 @@ jobs:
         shell: bash
         run: |
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/0.2.2/onnx_light-0.2.2-cp313-cp313-win_amd64.whl"
+            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/0.2.3/onnx_light-0.2.3-cp313-cp313-win_amd64.whl"
           else
-            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/0.2.2/onnx_light-0.2.2-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/0.2.3/onnx_light-0.2.3-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
           fi
           python -m pip install "${onnx_light_wheel}"
           python - <<'PY'

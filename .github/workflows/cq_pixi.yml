@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.2
+  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.3
 
 jobs:
   check_recent_commit:
@@ -60,7 +60,7 @@ jobs:
           cache: true
       - name: Install onnx-light Python runtime
         run: |
-          pixi run --environment default pip install "onnx-light==0.2.2"
+          pixi run --environment default pip install "onnx-light==0.2.3"
           pixi run --environment default python - <<'PY'
           import os
           from pathlib import Path
