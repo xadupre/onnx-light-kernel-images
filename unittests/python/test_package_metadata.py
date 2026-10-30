@@ -41,10 +41,9 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_onnx_light_dependency(self):
         metadata = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
-        self.assertIn("onnx-light==0.2.0", metadata["project"]["dependencies"])
-        self.assertIn("onnx-light==0.2.0", metadata["build-system"]["requires"])
+        self.assertIn("onnx-light==0.2.2", metadata["project"]["dependencies"])
+        self.assertIn("onnx-light==0.2.2", metadata["build-system"]["requires"])
         for filename in (
-            "ci_core.yml",
             "docs.yml",
             "cq_hardening.yml",
             "cq_asan_ubsan.yml",
@@ -52,13 +51,24 @@ class TestPackageMetadata(unittest.TestCase):
         ):
             with self.subTest(workflow=filename):
                 self.assertIn(
-                    'pip install "onnx-light==0.2.0"',
+                    'pip install "onnx-light==0.2.2"',
                     (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
                 )
         self.assertIn(
-            "Install onnx-light==0.2.0 before building the Python extension.",
+            "Install onnx-light==0.2.2 before building the Python extension.",
             (_REPO_ROOT / "cmake" / "OnnxLightPython.cmake").read_text(),
         )
+
+    def test_core_ci_uses_full_runtime_without_build_isolation(self):
+        workflow = (_REPO_ROOT / ".github" / "workflows" / "ci_core.yml").read_text()
+        for wheel in (
+            "onnx_light-0.2.2-cp313-cp313-win_amd64.whl",
+            "onnx_light-0.2.2-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+        ):
+            with self.subTest(wheel=wheel):
+                self.assertIn(wheel, workflow)
+        self.assertIn("Install Python build dependencies", workflow)
+        self.assertEqual(workflow.count("pip install --no-build-isolation"), 2)
 
     def test_release_wheel_discovery(self):
         for filename in (
@@ -72,7 +82,7 @@ class TestPackageMetadata(unittest.TestCase):
             with self.subTest(workflow=filename):
                 self.assertIn(
                     "  PIP_FIND_LINKS: "
-                    "https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.0",
+                    "https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.2",
                     (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
                 )
 
@@ -81,7 +91,7 @@ class TestPackageMetadata(unittest.TestCase):
             with self.subTest(workflow=filename):
                 workflow = (_REPO_ROOT / ".github" / "workflows" / filename).read_text()
                 setup, build = workflow.split("      - name: Build and install package", 1)
-                self.assertIn('pip install "onnx-light==0.2.0"', setup)
+                self.assertIn('pip install "onnx-light==0.2.2"', setup)
                 self.assertIn('Path(get_cpp_build_info()["library_dir"])', setup)
                 self.assertIn('library_dir.parent.parent / "onnx_light.libs"', setup)
                 self.assertIn('env.write(f"LD_LIBRARY_PATH={os.pathsep.join(paths)}\\n")', setup)
@@ -89,7 +99,7 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_pixi_runtime_setup(self):
         workflow = (_REPO_ROOT / ".github" / "workflows" / "cq_pixi.yml").read_text()
-        install = 'pixi run --environment default pip install "onnx-light==0.2.0"'
+        install = 'pixi run --environment default pip install "onnx-light==0.2.2"'
         configure = "pixi run --environment default python - <<'PY'"
         test = "pixi run --environment default test-python"
         self.assertLess(workflow.index(install), workflow.index(configure))
@@ -102,10 +112,35 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_cpp_release_archive(self):
         self.assertIn(
-            "https://github.com/xadupre/onnx-light/releases/download/0.2.0/"
+            "https://github.com/xadupre/onnx-light/releases/download/0.2.2/"
             "${_onnx_light_archive}",
             (_REPO_ROOT / "CMakeLists.txt").read_text(),
         )
+
+    def test_cmake_minimum_version(self):
+        metadata = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
+        self.assertNotIn("cmake>=4.0", metadata["build-system"]["requires"])
+        self.assertIn(
+            "cmake_minimum_required(VERSION 4.0)",
+            (_REPO_ROOT / "CMakeLists.txt").read_text(),
+        )
+        pixi = tomllib.loads((_REPO_ROOT / "pixi.toml").read_text())
+        self.assertEqual(pixi["dependencies"]["cmake"], ">=4.0")
+        core_workflow = (_REPO_ROOT / ".github" / "workflows" / "ci_core.yml").read_text()
+        cmake_setup = 'python -m pip install "cmake>=4.0"'
+        build = core_workflow.index("pip install --no-build-isolation -C build-dir=build")
+        self.assertLess(core_workflow.index(cmake_setup), build)
+        for filename in (
+            "build_release_cpp.yml",
+            "ci_core.yml",
+            "cpp_coverage_weekly.yml",
+            "cq_fuzz.yml",
+        ):
+            with self.subTest(workflow=filename):
+                self.assertIn(
+                    '"cmake>=4.0"',
+                    (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
+                )
 
     def test_supported_python_versions(self):
         project = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())["project"]

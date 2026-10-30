@@ -65,7 +65,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libopenjp2-7 libwebp7
           python -m pip install --upgrade pip
-          python -m pip install gcovr
+          python -m pip install "cmake>=4.0" gcovr
 
       # Build the C++ library and tests directly with CMake (Python extension
       # disabled) so the coverage flags apply cleanly. A Debug/-O0 build keeps
