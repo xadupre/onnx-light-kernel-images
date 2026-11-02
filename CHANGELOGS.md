@@ -7,7 +7,7 @@ All notable changes to this project are documented in this file.
 ### Dependencies
 
 - Update the package version to 0.2.4.
-- Require onnx-light 0.2.4 for the runtime, C++ release archives, and Python wheels,
+- Require onnx-light 0.2.4.1 for the runtime, C++ release archives, and Python wheels,
   and verify the Python runtime version before building the extension.
 
 ## [0.2.1] – Unreleased

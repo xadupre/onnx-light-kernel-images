@@ -63,11 +63,11 @@ for the project changelog.
 ### Python wheel (recommended)
 
 ```bash
-pip install --find-links https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.4 .
+pip install --find-links https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.4.1 .
 ```
 
-The required `onnx-light==0.2.4` wheels are hosted on GitHub Releases, not PyPI.
-Only the onnx-light 0.2.4 runtime API is supported; older API compatibility paths
+The required `onnx-light==0.2.4.1` wheels are hosted on GitHub Releases, not PyPI.
+Only the onnx-light 0.2.4.1 runtime API is supported; older API compatibility paths
 are not provided.
 For other pip-based install commands below, set `PIP_FIND_LINKS` to the same URL.
 Python builds link to that runtime's shared libraries so kernel registration
@@ -113,7 +113,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-The build automatically downloads the onnx-light 0.2.4 C++ release archive.
+The build automatically downloads the onnx-light 0.2.4.1 C++ release archive.
 To use a custom install, set `-DONNX_LIGHT_ROOT=/path/to/onnx-light-cpp`.
 
 ### Compiler hardening
