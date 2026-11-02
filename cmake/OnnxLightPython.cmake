@@ -3,13 +3,13 @@
 find_package(Python 3.12 REQUIRED COMPONENTS Interpreter)
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -c
-    "from onnx_light import get_cpp_build_info; i = get_cpp_build_info(); print(';'.join(i[k].replace('\\\\', '/') for k in ('include_dir', 'core_library', 'proto_library', 'library_dir')))"
+    "from onnx_light import __version__, get_cpp_build_info; import sys; sys.exit('Expected onnx-light==0.2.4.1, found ' + __version__) if __version__ != '0.2.4.1' else None; i = get_cpp_build_info(); print(';'.join(i[k].replace('\\\\', '/') for k in ('include_dir', 'core_library', 'proto_library', 'library_dir')))"
   RESULT_VARIABLE _onnx_light_info_status
   OUTPUT_VARIABLE _onnx_light_info
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 if(NOT _onnx_light_info_status EQUAL 0)
-  message(FATAL_ERROR "Install onnx-light==0.2.3 before building the Python extension.")
+  message(FATAL_ERROR "Install onnx-light==0.2.4.1 before building the Python extension.")
 endif()
 list(GET _onnx_light_info 0 _onnx_light_include)
 list(GET _onnx_light_info 1 ONNX_LIGHT_KERNEL_IMAGES_ONNX_LIGHT_LIBRARY)
