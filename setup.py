@@ -412,7 +412,7 @@ class BuildExt(Command):
 
 setup(
     name="onnx-light-kernel-images",
-    version="0.2.1",
+    version="0.2.4",
     packages=["onnx_light_kernel_images"],
     distclass=NoConfigDistribution,
     cmdclass={"build_ext": BuildExt},

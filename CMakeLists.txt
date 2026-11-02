@@ -9,7 +9,7 @@ if(NOT _is_multi_config AND NOT CMAKE_BUILD_TYPE)
       "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 endif()
 
-project(onnx_light_kernel_images VERSION 0.2.1 LANGUAGES CXX)
+project(onnx_light_kernel_images VERSION 0.2.4 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -258,7 +258,7 @@ elseif(NOT DEFINED ONNX_LIGHT_ROOT)
   endif()
 
   set(_onnx_light_url
-      "https://github.com/xadupre/onnx-light/releases/download/0.2.3/${_onnx_light_archive}")
+      "https://github.com/xadupre/onnx-light/releases/download/0.2.4/${_onnx_light_archive}")
 
   FetchContent_Declare(
     onnx_light_cpp

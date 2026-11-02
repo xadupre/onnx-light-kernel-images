@@ -2,13 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.2.1] – Unreleased
+## [0.2.4] – Unreleased
 
 ### Dependencies
 
-- Update the package version to 0.2.1.
-- Keep the required onnx-light runtime, C++ release archives, and Python wheels
-  at the published 0.2.0 release.
+- Update the package version to 0.2.4.
+- Require onnx-light 0.2.4 for the runtime, C++ release archives, and Python wheels,
+  and verify the Python runtime version before building the extension.
 
 ## [0.2.0]
 
