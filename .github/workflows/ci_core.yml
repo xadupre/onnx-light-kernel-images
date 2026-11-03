@@ -10,9 +10,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.4.1
-
 jobs:
   core_tests:
     name: core (${{ matrix.os }}, py${{ matrix.python-version }})
@@ -34,6 +31,9 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Read onnx-light version from pyproject.toml
+        run: python tools/onnx_light_version.py --github-env
 
       - name: Install CMake
         run: python -m pip install "cmake>=4.0"
@@ -67,9 +67,9 @@ jobs:
         shell: bash
         run: |
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/0.2.4.1/onnx_light-0.2.4.1-cp313-cp313-win_amd64.whl"
+            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/${ONNX_LIGHT_VERSION}/onnx_light-${ONNX_LIGHT_VERSION}-cp313-cp313-win_amd64.whl"
           else
-            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/0.2.4.1/onnx_light-0.2.4.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+            onnx_light_wheel="https://github.com/xadupre/onnx-light/releases/download/${ONNX_LIGHT_VERSION}/onnx_light-${ONNX_LIGHT_VERSION}-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
           fi
           python -m pip install "${onnx_light_wheel}"
           python - <<'PY'

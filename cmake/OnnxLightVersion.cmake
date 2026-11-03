@@ -1,0 +1,16 @@
+# Keep standalone C++ builds independent of a Python interpreter.
+set(_onnx_light_pyproject "${CMAKE_CURRENT_LIST_DIR}/../pyproject.toml")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_onnx_light_pyproject}")
+file(READ "${_onnx_light_pyproject}" _onnx_light_metadata)
+string(REGEX MATCHALL "\"onnx-light([<>=!~ ][^\"]*)?\"" _onnx_light_pins "${_onnx_light_metadata}")
+list(LENGTH _onnx_light_pins _onnx_light_pin_count)
+if(NOT _onnx_light_pin_count EQUAL 2)
+  message(FATAL_ERROR "Expected build and runtime onnx-light pins in pyproject.toml.")
+endif()
+list(REMOVE_DUPLICATES _onnx_light_pins)
+list(LENGTH _onnx_light_pins _onnx_light_pin_count)
+if(NOT _onnx_light_pin_count EQUAL 1 OR
+   NOT _onnx_light_pins MATCHES "^\"onnx-light==([0-9]+(\\.[0-9]+)+)\"$")
+  message(FATAL_ERROR "Build and runtime onnx-light pins must be matching exact releases.")
+endif()
+set(ONNX_LIGHT_VERSION "${CMAKE_MATCH_1}")

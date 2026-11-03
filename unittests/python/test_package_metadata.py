@@ -27,7 +27,7 @@ class TestPackageMetadata(unittest.TestCase):
         )
 
     def test_release_version(self):
-        self.assertEqual(__version__, "0.2.4")
+        self.assertEqual(__version__, "0.2.5")
         for filename, declaration in (
             ("pyproject.toml", f'version = "{__version__}"'),
             ("setup.py", f'version="{__version__}"'),
@@ -41,8 +41,8 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_onnx_light_dependency(self):
         metadata = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
-        self.assertIn("onnx-light==0.2.4.1", metadata["project"]["dependencies"])
-        self.assertIn("onnx-light==0.2.4.1", metadata["build-system"]["requires"])
+        self.assertIn("onnx-light==0.2.5", metadata["project"]["dependencies"])
+        self.assertIn("onnx-light==0.2.5", metadata["build-system"]["requires"])
         for filename in (
             "docs.yml",
             "cq_hardening.yml",
@@ -51,22 +51,24 @@ class TestPackageMetadata(unittest.TestCase):
         ):
             with self.subTest(workflow=filename):
                 self.assertIn(
-                    'pip install "onnx-light==0.2.4.1"',
+                    'pip install "onnx-light==${ONNX_LIGHT_VERSION}"',
                     (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
                 )
         self.assertIn(
-            "Install onnx-light==0.2.4.1 before building the Python extension.",
+            "Install onnx-light==${ONNX_LIGHT_VERSION} before building the Python extension.",
             (_REPO_ROOT / "cmake" / "OnnxLightPython.cmake").read_text(),
         )
 
     def test_core_ci_uses_full_runtime_without_build_isolation(self):
         workflow = (_REPO_ROOT / ".github" / "workflows" / "ci_core.yml").read_text()
         for wheel in (
-            "onnx_light-0.2.4.1-cp313-cp313-win_amd64.whl",
-            "onnx_light-0.2.4.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+            "onnx_light-${ONNX_LIGHT_VERSION}-cp313-cp313-win_amd64.whl",
+            "onnx_light-${ONNX_LIGHT_VERSION}-cp313-cp313-"
+            "manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
         ):
             with self.subTest(wheel=wheel):
                 self.assertIn(wheel, workflow)
+        self.assertIn("releases/download/${ONNX_LIGHT_VERSION}/", workflow)
         self.assertIn("Install Python build dependencies", workflow)
         self.assertEqual(workflow.count("pip install --no-build-isolation"), 2)
 
@@ -80,18 +82,23 @@ class TestPackageMetadata(unittest.TestCase):
             "cq_pixi.yml",
         ):
             with self.subTest(workflow=filename):
-                self.assertIn(
-                    "  PIP_FIND_LINKS: "
-                    "https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.4.1",
-                    (_REPO_ROOT / ".github" / "workflows" / filename).read_text(),
+                workflow = (_REPO_ROOT / ".github" / "workflows" / filename).read_text()
+                read_version = "python tools/onnx_light_version.py --github-env"
+                self.assertIn(read_version, workflow)
+                self.assertNotIn("0.2.5", workflow)
+                install = (
+                    "python -m pip install --upgrade pip build"
+                    if filename == "build_release_wheel.yml"
+                    else "- name: Install onnx-light Python runtime"
                 )
+                self.assertLess(workflow.index(read_version), workflow.index(install))
 
     def test_acq_runtime_library_paths(self):
         for filename in ("cq_hardening.yml", "cq_asan_ubsan.yml"):
             with self.subTest(workflow=filename):
                 workflow = (_REPO_ROOT / ".github" / "workflows" / filename).read_text()
                 setup, build = workflow.split("      - name: Build and install package", 1)
-                self.assertIn('pip install "onnx-light==0.2.4.1"', setup)
+                self.assertIn('pip install "onnx-light==${ONNX_LIGHT_VERSION}"', setup)
                 self.assertIn('Path(get_cpp_build_info()["library_dir"])', setup)
                 self.assertIn('library_dir.parent.parent / "onnx_light.libs"', setup)
                 self.assertIn('env.write(f"LD_LIBRARY_PATH={os.pathsep.join(paths)}\\n")', setup)
@@ -99,7 +106,7 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_pixi_runtime_setup(self):
         workflow = (_REPO_ROOT / ".github" / "workflows" / "cq_pixi.yml").read_text()
-        install = 'pixi run --environment default pip install "onnx-light==0.2.4.1"'
+        install = 'pixi run --environment default pip install "onnx-light==${ONNX_LIGHT_VERSION}"'
         configure = "pixi run --environment default python - <<'PY'"
         test = "pixi run --environment default test-python"
         self.assertLess(workflow.index(install), workflow.index(configure))
@@ -112,20 +119,122 @@ class TestPackageMetadata(unittest.TestCase):
 
     def test_cpp_release_archive(self):
         self.assertIn(
-            "https://github.com/xadupre/onnx-light/releases/download/0.2.4.1/"
+            "https://github.com/xadupre/onnx-light/releases/download/${ONNX_LIGHT_VERSION}/"
             "${_onnx_light_archive}",
             (_REPO_ROOT / "CMakeLists.txt").read_text(),
         )
 
+    def test_onnx_light_version_extraction(self):
+        tool = _REPO_ROOT / "tools" / "onnx_light_version.py"
+        cmake_module = _REPO_ROOT / "cmake" / "OnnxLightVersion.cmake"
+        metadata = (_REPO_ROOT / "pyproject.toml").read_text()
+        for version in ("0.2.5", "9.8.7", "0.2.4.1"):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                pyproject = root / "pyproject.toml"
+                pyproject.write_text(
+                    metadata.replace("onnx-light==0.2.5", f"onnx-light=={version}")
+                )
+                (root / "cmake").mkdir()
+                module = root / "cmake" / cmake_module.name
+                module.write_text(cmake_module.read_text())
+                script = root / "probe.cmake"
+                script.write_text(
+                    f'include("{module.as_posix()}")\n'
+                    'message(STATUS "Detected release: ${ONNX_LIGHT_VERSION}")\n'
+                )
+                result = subprocess.run(
+                    ["cmake", "-P", str(script)], capture_output=True, text=True, check=False
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn(f"Detected release: {version}", result.stdout)
+                result = subprocess.run(
+                    [sys.executable, str(tool), "--pyproject", str(pyproject)],
+                    cwd=root,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), version)
+                env_file = root / "github.env"
+                env_file.write_text("EXISTING=value\n")
+                subprocess.run(
+                    [sys.executable, str(tool), "--pyproject", str(pyproject), "--github-env"],
+                    env={**os.environ, "GITHUB_ENV": str(env_file)},
+                    check=True,
+                )
+                self.assertEqual(
+                    env_file.read_text(),
+                    f"EXISTING=value\nONNX_LIGHT_VERSION={version}\n"
+                    "PIP_FIND_LINKS=https://github.com/xadupre/onnx-light/"
+                    f"releases/expanded_assets/{version}\n",
+                )
+                runtime_module = root / "cmake" / "OnnxLightPython.cmake"
+                runtime_module.write_text(
+                    (_REPO_ROOT / "cmake" / runtime_module.name).read_text()
+                )
+                (root / "onnx_light.py").write_text(
+                    f"__version__ = {version!r}\n"
+                    "def get_cpp_build_info():\n"
+                    "    return dict(include_dir='/runtime/onnx_light', "
+                    "core_library='/runtime/core.so', proto_library='/runtime/proto.so', "
+                    "library_dir='/runtime')\n"
+                )
+                script.write_text(
+                    f'set(Python_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
+                    "set(WIN32 FALSE)\n"
+                    f'include("{runtime_module.as_posix()}")\n'
+                )
+                result = subprocess.run(
+                    ["cmake", "-P", str(script)],
+                    cwd=root,
+                    env={**os.environ, "PYTHONPATH": str(root)},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_onnx_light_invalid_pins(self):
+        tool = _REPO_ROOT / "tools" / "onnx_light_version.py"
+        module = _REPO_ROOT / "cmake" / "OnnxLightVersion.cmake"
+        for runtime, build in (
+            ("onnx-light==0.2.5", "onnx-light==0.2.6"),
+            ("onnx-light>=0.2.5", "onnx-light==0.2.5"),
+            ("onnx-light==0.2.5", "onnx-light"),
+            ("numpy>=2.1", "onnx-light==0.2.5"),
+        ):
+            with (
+                self.subTest(runtime=runtime, build=build),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                pyproject = root / "pyproject.toml"
+                pyproject.write_text(
+                    f'[project]\ndependencies = ["{runtime}"]\n'
+                    f'[build-system]\nrequires = ["{build}"]\n'
+                )
+                (root / "cmake").mkdir()
+                copied_module = root / "cmake" / module.name
+                copied_module.write_text(module.read_text())
+                for command in (
+                    [sys.executable, str(tool), "--pyproject", str(pyproject)],
+                    ["cmake", "-P", str(copied_module)],
+                ):
+                    result = subprocess.run(command, capture_output=True, text=True, check=False)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
+                    self.assertIn("onnx-light", result.stderr)
+
     def test_python_runtime_version_check(self):
         module = _REPO_ROOT / "cmake" / "OnnxLightPython.cmake"
-        for version in ("0.2.3", "0.2.4", "0.2.4.1", "0.2.4.2", "0.2.5", "0.2.4.1.dev0"):
+        for version in ("0.2.3", "0.2.4", "0.2.4.1", "0.2.4.2", "0.2.5", "0.2.5.dev0", "0.2.6"):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "onnx_light.py").write_text(
                     f"__version__ = {version!r}\n"
                     "def get_cpp_build_info():\n"
-                    "    if __version__ != '0.2.4.1':\n"
+                    "    if __version__ != '0.2.5':\n"
                     "        raise RuntimeError('Version must be checked before build info')\n"
                     "    return dict(include_dir='/runtime/onnx_light', "
                     "core_library='/runtime/core.so', proto_library='/runtime/proto.so', "
@@ -148,14 +257,14 @@ class TestPackageMetadata(unittest.TestCase):
                     text=True,
                     check=False,
                 )
-                if version == "0.2.4.1":
+                if version == "0.2.5":
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertIn("Detected runtime: /runtime", result.stdout)
                 else:
                     self.assertNotEqual(result.returncode, 0)
-                    self.assertIn(f"Expected onnx-light==0.2.4.1, found {version}", result.stderr)
+                    self.assertIn(f"Expected onnx-light==0.2.5, found {version}", result.stderr)
                     self.assertIn(
-                        "Install onnx-light==0.2.4.1 before building the Python extension.",
+                        "Install onnx-light==0.2.5 before building the Python extension.",
                         " ".join(result.stderr.split()),
                     )
                     self.assertNotIn("Version must be checked before build info", result.stderr)

@@ -11,9 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.4.1
-
 jobs:
   check_recent_commit:
     name: check recent commit
@@ -96,9 +93,12 @@ jobs:
           echo "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}" >> "$GITHUB_ENV"
           echo "CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}"
 
+      - name: Read onnx-light version from pyproject.toml
+        run: python tools/onnx_light_version.py --github-env
+
       - name: Install onnx-light Python runtime
         run: |
-          pip install "onnx-light==0.2.4.1"
+          pip install "onnx-light==${ONNX_LIGHT_VERSION}"
           python - <<'PY'
           import os
           from pathlib import Path

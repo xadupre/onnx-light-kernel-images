@@ -15,9 +15,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.4.1
-
 # The Python extension links the shared runtime from the onnx-light wheel.
 # Linux wheels are built natively on ubuntu-24.04 to keep the C++ ABI compatible.
 # macOS wheels match onnx-light's universal2 architectures and deployment target.
@@ -59,6 +56,9 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Read onnx-light version from pyproject.toml
+        run: python tools/onnx_light_version.py --github-env
 
       - name: Detect runner CPU count
         id: cpu_count
