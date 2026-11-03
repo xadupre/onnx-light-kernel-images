@@ -27,7 +27,7 @@ class TestPackageMetadata(unittest.TestCase):
         )
 
     def test_release_version(self):
-        self.assertEqual(__version__, "0.2.4")
+        self.assertEqual(__version__, "0.2.5")
         for filename, declaration in (
             ("pyproject.toml", f'version = "{__version__}"'),
             ("setup.py", f'version="{__version__}"'),
