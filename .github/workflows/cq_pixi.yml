@@ -9,9 +9,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.5
-
 jobs:
   check_recent_commit:
     name: check recent commit
@@ -58,9 +55,11 @@ jobs:
         with:
           pixi-version: latest
           cache: true
+      - name: Read onnx-light version from pyproject.toml
+        run: pixi run --environment default python tools/onnx_light_version.py --github-env
       - name: Install onnx-light Python runtime
         run: |
-          pixi run --environment default pip install "onnx-light==0.2.5"
+          pixi run --environment default pip install "onnx-light==${ONNX_LIGHT_VERSION}"
           pixi run --environment default python - <<'PY'
           import os
           from pathlib import Path

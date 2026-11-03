@@ -10,9 +10,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.5
-
 jobs:
   docs:
     name: build docs
@@ -27,6 +24,9 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+
+      - name: Read onnx-light version from pyproject.toml
+        run: python tools/onnx_light_version.py --github-env
 
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -51,9 +51,9 @@ jobs:
       # ReferenceEvaluator.
       # Use the released Python runtime matching the C++ archive.
       - name: Install onnx-light Python runtime
-        run: pip install "onnx-light==0.2.5" -v
+        run: pip install "onnx-light==${ONNX_LIGHT_VERSION}" -v
 
-      # Build the ImageDecoder kernel (downloads the prebuilt onnx-light 0.2.5
+      # Build the ImageDecoder kernel (downloads the matching prebuilt onnx-light
       # C++ archive) and install the documentation dependencies.
       - name: Build and install package with docs extras
         env:

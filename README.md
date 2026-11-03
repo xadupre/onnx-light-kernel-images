@@ -114,6 +114,8 @@ ctest --test-dir build
 ```
 
 The build automatically downloads the onnx-light 0.2.5 C++ release archive.
+Both CMake and CI read the required onnx-light version from the matching build and
+runtime pins in `pyproject.toml`.
 To use a custom install, set `-DONNX_LIGHT_ROOT=/path/to/onnx-light-cpp`.
 
 ### Compiler hardening

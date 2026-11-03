@@ -7,9 +7,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PIP_FIND_LINKS: https://github.com/xadupre/onnx-light/releases/expanded_assets/0.2.5
-
 jobs:
   sanitizer_build_ubuntu:
     name: asan+ubsan (ubuntu-latest, py3.13)
@@ -25,6 +22,9 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+
+      - name: Read onnx-light version from pyproject.toml
+        run: python tools/onnx_light_version.py --github-env
 
       - name: Install clang (Linux)
         run: sudo apt-get update && sudo apt-get install -y clang
@@ -44,7 +44,7 @@ jobs:
 
       - name: Install onnx-light Python runtime
         run: |
-          pip install "onnx-light==0.2.5"
+          pip install "onnx-light==${ONNX_LIGHT_VERSION}"
           python - <<'PY'
           import os
           from pathlib import Path

@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 
 - Update the package version to 0.2.5.
 - Require onnx-light 0.2.5 for the runtime, C++ release archives, and Python wheels.
+- Read the onnx-light release version from `pyproject.toml` in CMake and CI.
 
 ## [0.2.4] – Unreleased
 
