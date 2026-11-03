@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Dependencies
+
+- Require onnx-light 0.2.5 for the runtime, C++ release archives, and Python wheels.
+
 ## [0.2.4] – Unreleased
 
 ### Dependencies
