@@ -44,7 +44,6 @@ class TestPackageMetadata(unittest.TestCase):
         self.assertIn("onnx-light==0.2.5", metadata["project"]["dependencies"])
         self.assertIn("onnx-light==0.2.5", metadata["build-system"]["requires"])
         for filename in (
-            "docs.yml",
             "cq_hardening.yml",
             "cq_asan_ubsan.yml",
             "cq_pixi.yml",
