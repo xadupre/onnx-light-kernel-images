@@ -49,16 +49,31 @@ jobs:
       # Sphinx-Gallery executes docs/examples/plot_image_formats.py at build
       # time, which runs an ImageDecoder model through onnx-light's
       # ReferenceEvaluator.
-      # Use the released Python runtime matching the C++ archive.
+      # Use the full released wheel: reduced wheels omit the kernels runtime.
       - name: Install onnx-light Python runtime
-        run: pip install "onnx-light==${ONNX_LIGHT_VERSION}" -v
+        run: |
+          python -m pip install "https://github.com/xadupre/onnx-light/releases/download/${ONNX_LIGHT_VERSION}/onnx_light-${ONNX_LIGHT_VERSION}-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from onnx_light import get_cpp_build_info
 
-      # Build the ImageDecoder kernel (downloads the matching prebuilt onnx-light
-      # C++ archive) and install the documentation dependencies.
+          library_dir = Path(get_cpp_build_info()["library_dir"])
+          paths = [str(library_dir), str(library_dir.parent.parent / "onnx_light.libs")]
+          paths.append(os.environ.get("LD_LIBRARY_PATH", ""))
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"LD_LIBRARY_PATH={os.pathsep.join(paths)}\n")
+          PY
+
+      - name: Install Python build dependencies
+        run: python -m pip install "cmake>=4.0" "scikit-build-core>=0.3.3" "nanobind>=1.3.2"
+
+      # Build against the installed full runtime without an isolated environment
+      # selecting a reduced wheel, and install the documentation dependencies.
       - name: Build and install package with docs extras
         env:
           SCCACHE_GHA_ENABLED: "true"
-        run: pip install -C build-dir=build -C cmake.build-type=Release -C cmake.define.CMAKE_C_COMPILER_LAUNCHER=sccache -C cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=sccache -e .[docs] -v
+        run: pip install --no-build-isolation -C build-dir=build -C cmake.build-type=Release -C cmake.define.CMAKE_C_COMPILER_LAUNCHER=sccache -C cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=sccache -e .[docs] -v
 
       - name: pip freeze
         run: pip freeze
